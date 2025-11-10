@@ -1,0 +1,21 @@
+# === General ===
+node_modules/
+dist/
+build/
+.env
+.env.* 
+*.log
+
+# === React / Vite ===
+app/node_modules/
+app/dist/
+app/build/
+
+# === Python ===
+__pycache__/
+*.pyc
+*.pyo
+
+# === Docker ===
+docker-data/
+*.pid

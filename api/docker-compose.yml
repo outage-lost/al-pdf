@@ -1,0 +1,13 @@
+version: '3.8'
+
+services:
+  pdf-server:
+    build: .
+    container_name: al-pdf-server
+    network_mode: "host"  # ✅ ESTA LÍNEA ES CRÍTICA
+    volumes:
+      - ./temp:/app/temp
+    environment:
+      - PYTHONPATH=/app
+      - TEMP_DIR=/app/temp
+    restart: unless-stopped

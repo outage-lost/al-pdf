@@ -1,0 +1,319 @@
+/* Merge.css - Cuadrícula con drag & drop fluido */
+.merge {
+    width: 100%;
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 2rem;
+}
+
+.merge-header {
+    text-align: center;
+    margin-bottom: 3rem;
+}
+
+.merge-header h1 {
+    font-size: 2.5rem;
+    margin-bottom: 1rem;
+    color: var(--foreground);
+}
+
+.merge-header p {
+    font-size: 1.2rem;
+    color: var(--muted-foreground);
+}
+
+.upload-section {
+    display: flex;
+    justify-content: center;
+    margin-bottom: 3rem;
+}
+
+.upload-area {
+    border: 2px dashed var(--border);
+    border-radius: 16px;
+    padding: 3rem 2rem;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    background: var(--card);
+    width: 100%;
+    max-width: 600px;
+}
+
+.upload-area:hover {
+    border-color: var(--primary);
+    background: var(--card);
+    transform: translateY(-2px);
+}
+
+.upload-icon {
+    font-size: 3rem;
+    margin-bottom: 1rem;
+    opacity: 0.7;
+}
+
+.file-count {
+    color: var(--muted-foreground);
+    font-size: 0.9rem;
+    display: block;
+    margin-top: 1rem;
+}
+
+/* Cuadrícula de archivos */
+.files-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 1.5rem;
+    margin: 2rem 0;
+}
+
+.file-card {
+    background: var(--card);
+    border: 2px solid var(--border);
+    border-radius: 12px;
+    padding: 1.5rem;
+    cursor: grab;
+    transition: all 0.3s ease;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    min-height: 180px;
+}
+
+.file-card:active {
+    cursor: grabbing;
+}
+
+.file-card:hover {
+    border-color: var(--primary);
+    transform: translateY(-4px);
+    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.1);
+}
+
+.file-card.dragging {
+    opacity: 0.5;
+    transform: scale(0.95);
+}
+
+/* Indicador de posición */
+.position-indicator {
+    position: absolute;
+    top: -8px;
+    left: -8px;
+    background: var(--primary);
+    color: var(--primary-foreground);
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.9rem;
+    font-weight: 600;
+    box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3);
+}
+
+.file-preview {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.75rem;
+}
+
+.preview-icon {
+    font-size: 2.5rem;
+    opacity: 0.8;
+}
+
+.file-info {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    width: 100%;
+}
+
+.file-name {
+    font-weight: 500;
+    color: var(--foreground);
+    word-break: break-word;
+    font-size: 0.9rem;
+    line-height: 1.3;
+}
+
+.file-size {
+    font-size: 0.8rem;
+    color: var(--muted-foreground);
+}
+
+.remove-btn {
+    position: absolute;
+    top: -8px;
+    right: -8px;
+    background: var(--destructive);
+    color: white;
+    border: none;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    font-size: 1rem;
+    transition: all 0.2s ease;
+}
+
+.remove-btn:hover {
+    transform: scale(1.1);
+    box-shadow: 0 2px 8px rgba(239, 68, 68, 0.3);
+}
+
+.section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin: 2rem 0 1rem 0;
+    flex-wrap: wrap;
+    gap: 1rem;
+}
+
+.section-header h3 {
+    color: var(--foreground);
+    margin: 0;
+}
+
+.clear-all-btn {
+    background: var(--destructive);
+    color: white;
+    border: none;
+    padding: 0.75rem 1.5rem;
+    border-radius: 8px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.clear-all-btn:hover {
+    background: #dc2626;
+    transform: translateY(-1px);
+}
+
+.action-section {
+    text-align: center;
+    margin: 3rem 0;
+}
+
+.merge-btn {
+    background: var(--primary);
+    color: var(--primary-foreground);
+    border: none;
+    padding: 1rem 2rem;
+    border-radius: 8px;
+    font-size: 1.1rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.merge-btn:hover:not(:disabled) {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+}
+
+.merge-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+    transform: none;
+}
+
+/* Animación de arrastre suave */
+@keyframes slideIn {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.file-card {
+    animation: slideIn 0.3s ease;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .files-grid {
+        grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+        gap: 1rem;
+    }
+
+    .file-card {
+        min-height: 160px;
+        padding: 1rem;
+    }
+
+    .section-header {
+        flex-direction: column;
+        align-items: stretch;
+        text-align: center;
+    }
+}
+
+/* Mejoras para el drag & drop */
+.files-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: 1rem;
+    margin: 2rem 0;
+}
+
+.file-card {
+    position: relative;
+    transition: all 0.3s ease;
+}
+
+.file-card.drag-over {
+    border: 2px dashed var(--primary);
+    background: rgba(59, 130, 246, 0.1);
+}
+
+.drop-indicator {
+    position: absolute;
+    width: 4px;
+    height: 100%;
+    background: var(--primary);
+    left: -10px;
+    top: 0;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+
+.file-card.drop-target .drop-indicator {
+    opacity: 1;
+}
+
+/* Preview en las tarjetas */
+.file-preview {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.75rem;
+    padding: 1rem 0;
+}
+
+.preview-icon {
+    font-size: 2rem;
+    opacity: 0.8;
+}

@@ -1,0 +1,504 @@
+/* App.css - Versión Minimalista Mejorada */
+:root {
+    /* Modo Claro - Simplificado */
+    --background: #ffffff;
+    --foreground: #1a1a1a;
+    --card: #f8fafc;
+    --card-foreground: #1a1a1a;
+    --primary: #3b82f6;
+    --primary-foreground: #ffffff;
+    --secondary: #f1f5f9;
+    --secondary-foreground: #1a1a1a;
+    --muted: #f1f5f9;
+    --muted-foreground: #64748b;
+    --success: #10b981;
+    --destructive: #ef4444;
+    --border: #e2e8f0;
+    --input: #ffffff;
+    --ring: #3b82f6;
+
+    /* Efectos minimalistas */
+    --shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+    --shadow-lg: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+}
+
+.dark-theme {
+    /* Modo Oscuro - Texto blanco, fondos oscuros suaves */
+    --background: #0f0f0f;
+    --foreground: #ffffff;
+    --card: #1a1a1a;
+    --card-foreground: #ffffff;
+    --primary: #60a5fa;
+    --primary-foreground: #0f0f0f;
+    --secondary: #262626;
+    --secondary-foreground: #ffffff;
+    --muted: #262626;
+    --muted-foreground: #a3a3a3;
+    --success: #34d399;
+    --destructive: #f87171;
+    --border: #404040;
+    --input: #1a1a1a;
+    --ring: #60a5fa;
+}
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    background-color: var(--background);
+    color: var(--foreground);
+    line-height: 1.6;
+    transition: all 0.2s ease;
+}
+
+/* Header Minimalista Transparente */
+.header {
+    background: transparent;
+    position: sticky;
+    top: 0;
+    z-index: 1000;
+    padding: 1rem 0;
+}
+
+.header-content {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 0 2rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.logo {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 1.25rem;
+    font-weight: 600;
+    text-decoration: none;
+    color: var(--foreground);
+}
+
+.logo-icon {
+    font-size: 1.5rem;
+}
+
+/* Navegación tipo píldora */
+.nav {
+    display: flex;
+    gap: 0.5rem;
+    background: var(--card);
+    padding: 0.25rem;
+    border-radius: 50px;
+    backdrop-filter: blur(10px);
+}
+
+.nav-link {
+    text-decoration: none;
+    color: var(--muted-foreground);
+    font-weight: 500;
+    padding: 0.5rem 1.25rem;
+    border-radius: 50px;
+    transition: all 0.2s ease;
+    font-size: 0.9rem;
+}
+
+.nav-link:hover,
+.nav-link.active {
+    color: var(--primary);
+    background: var(--primary);
+    color: var(--primary-foreground);
+}
+
+/* Toggle de tema minimalista */
+.theme-toggle {
+    background: transparent;
+    border: 1.5px solid var(--border);
+    padding: 0.5rem;
+    border-radius: 50%;
+    width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    position: relative;
+}
+
+.theme-toggle::before {
+    content: '';
+    position: absolute;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: conic-gradient(from 0deg, #000000, #ffffff, #000000);
+    opacity: 0.7;
+    transition: all 0.3s ease;
+}
+
+.dark-theme .theme-toggle::before {
+    background: conic-gradient(from 180deg, #ffffff, #000000, #ffffff);
+}
+
+.theme-toggle:hover {
+    border-color: var(--primary);
+    transform: rotate(180deg);
+}
+
+/* Dashboard Mejorado */
+.dashboard {
+    padding: 2rem 0;
+    max-width: 1200px;
+    margin: 0 auto;
+}
+
+.dashboard-header {
+    text-align: center;
+    margin-bottom: 3rem;
+    padding: 0 2rem;
+}
+
+.dashboard-header h1 {
+    font-size: 2.5rem;
+    margin-bottom: 1rem;
+    font-weight: 700;
+    color: var(--foreground);
+}
+
+.dashboard-header p {
+    font-size: 1.1rem;
+    color: var(--muted-foreground);
+}
+
+/* Grid de características mejorado */
+.features-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 1.5rem;
+    padding: 0 2rem;
+}
+
+.feature-card {
+    background: var(--card);
+    border-radius: 16px;
+    padding: 2rem;
+    text-decoration: none;
+    color: var(--foreground);
+    transition: all 0.3s ease;
+    border: 1px solid transparent;
+    position: relative;
+    overflow: hidden;
+}
+
+.feature-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: var(--primary);
+    transform: scaleX(0);
+    transition: transform 0.3s ease;
+}
+
+.feature-card:hover::before {
+    transform: scaleX(1);
+}
+
+.feature-card:hover {
+    transform: translateY(-4px);
+    border-color: var(--primary);
+}
+
+.feature-icon {
+    width: 60px;
+    height: 60px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.5rem;
+    margin-bottom: 1.5rem;
+    background: var(--primary);
+    color: var(--primary-foreground);
+}
+
+.feature-card h3 {
+    margin-bottom: 1rem;
+    font-size: 1.25rem;
+    font-weight: 600;
+}
+
+.feature-card p {
+    color: var(--muted-foreground);
+    margin-bottom: 1.5rem;
+    line-height: 1.5;
+}
+
+.feature-action {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    color: var(--primary);
+    font-weight: 500;
+}
+
+/* Contenedor principal mejorado */
+.main-content {
+    flex: 1;
+    padding: 0;
+}
+
+/* Componentes comunes mejorados */
+.upload-area {
+    border: 2px dashed var(--border);
+    border-radius: 12px;
+    padding: 3rem 2rem;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    background: var(--card);
+    margin: 2rem auto;
+    max-width: 600px;
+}
+
+.upload-area:hover {
+    border-color: var(--primary);
+    background: var(--card);
+}
+
+.upload-icon {
+    font-size: 3rem;
+    margin-bottom: 1rem;
+    opacity: 0.7;
+}
+
+.file-input {
+    display: none;
+}
+
+/* Botones minimalistas */
+.btn {
+    background: var(--primary);
+    color: var(--primary-foreground);
+    border: none;
+    padding: 0.75rem 1.5rem;
+    border-radius: 8px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.9rem;
+}
+
+.btn:hover {
+    opacity: 0.9;
+    transform: translateY(-1px);
+}
+
+.btn-secondary {
+    background: var(--secondary);
+    color: var(--secondary-foreground);
+}
+
+.btn-success {
+    background: var(--success);
+    color: white;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .header-content {
+        padding: 0 1rem;
+    }
+
+    .nav {
+        gap: 0.25rem;
+    }
+
+    .nav-link {
+        padding: 0.5rem 1rem;
+        font-size: 0.8rem;
+    }
+
+    .dashboard-header h1 {
+        font-size: 2rem;
+    }
+
+    .features-grid {
+        grid-template-columns: 1fr;
+        padding: 0 1rem;
+    }
+
+    .upload-area {
+        margin: 1rem;
+        padding: 2rem 1rem;
+    }
+}
+
+@media (max-width: 640px) {
+    .nav {
+        display: none;
+    }
+
+    .header-content {
+        justify-content: center;
+    }
+}
+
+/* App.css - Correcciones */
+:root {
+    /* Modo Claro */
+    --background: #ffffff;
+    --foreground: #1a1a1a;
+    --card: #f8fafc;
+    --card-foreground: #1a1a1a;
+    --primary: #3b82f6;
+    --primary-foreground: #ffffff;
+    --secondary: #f1f5f9;
+    --secondary-foreground: #1a1a1a;
+    --muted: #f1f5f9;
+    --muted-foreground: #64748b;
+    --success: #10b981;
+    --destructive: #ef4444;
+    --border: #e2e8f0;
+    --input: #ffffff;
+    --ring: #3b82f6;
+}
+
+.dark-theme {
+    /* Modo Oscuro - Texto blanco puro */
+    --background: #0a0a0a;
+    --foreground: #ffffff;
+    --card: #1a1a1a;
+    --card-foreground: #ffffff;
+    --primary: #60a5fa;
+    --primary-foreground: #0a0a0a;
+    --secondary: #262626;
+    --secondary-foreground: #ffffff;
+    --muted: #262626;
+    --muted-foreground: #a3a3a3;
+    --success: #34d399;
+    --destructive: #f87171;
+    --border: #404040;
+    --input: #1a1a1a;
+    --ring: #60a5fa;
+}
+
+/* Header completamente transparente sin bordes */
+.header {
+    background: transparent;
+    position: sticky;
+    top: 0;
+    z-index: 1000;
+    padding: 1.5rem 0;
+}
+
+.header-content {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 0 2rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.logo {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    font-size: 1.5rem;
+    font-weight: 700;
+    text-decoration: none;
+    color: var(--foreground);
+}
+
+/* Logo con gradiente de colores */
+.logo-icon {
+    font-size: 1.8rem;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.1));
+}
+
+/* Navegación tipo píldora mejorada */
+.nav {
+    display: flex;
+    gap: 0.5rem;
+    background: var(--card);
+    padding: 0.5rem;
+    border-radius: 50px;
+    backdrop-filter: blur(20px);
+    border: 1px solid var(--border);
+}
+
+.nav-link {
+    text-decoration: none;
+    color: var(--muted-foreground);
+    font-weight: 500;
+    padding: 0.75rem 1.5rem;
+    border-radius: 50px;
+    transition: all 0.3s ease;
+    font-size: 0.9rem;
+    white-space: nowrap;
+}
+
+.nav-link:hover,
+.nav-link.active {
+    color: var(--primary-foreground);
+    background: var(--primary);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+}
+
+/* Toggle de tema con iconos visibles */
+.theme-toggle {
+    background: var(--card);
+    border: 1.5px solid var(--border);
+    padding: 0.75rem;
+    border-radius: 50%;
+    width: 48px;
+    height: 48px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    font-size: 1.2rem;
+    backdrop-filter: blur(20px);
+}
+
+.theme-toggle:hover {
+    border-color: var(--primary);
+    transform: rotate(180deg) scale(1.1);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+/* Contenedores centrados */
+.dashboard,
+.compress,
+.merge,
+.split,
+.convert {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 2rem;
+}
+
+/* Aseguramos que todo el contenido esté centrado */
+.main-content {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-height: calc(100vh - 120px);
+}
