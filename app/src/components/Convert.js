@@ -1,33 +1,44 @@
-// Convert.js - Versión Minimalista
-import React, { useState } from 'react';
-import { PDFConverter } from '../services/pdfService';
-import { saveAs } from 'file-saver';
-import './styles/Convert.css';
+// src/components/Convert.js
+
+import React, { useState } from "react";
+import { PDFConverter } from "../services/pdfService";
+import { saveAs } from "file-saver";
+import "./styles/Convert.css";
 
 const Convert = () => {
-    const [selectedFile, setSelectedFile] = useState(null);
+    const [selectedFiles, setSelectedFiles] = useState([]);
     const [isProcessing, setIsProcessing] = useState(false);
     const [downloadInfo, setDownloadInfo] = useState(null);
 
     const supportedFormats = [
-        { type: '.txt', label: 'Texto', icon: '📝' },
-        { type: '.jpg', label: 'JPEG', icon: '🖼️' },
-        { type: '.jpeg', label: 'JPEG', icon: '🖼️' },
-        { type: '.png', label: 'PNG', icon: '🖼️' },
-        { type: '.bmp', label: 'BMP', icon: '🖼️' }
+        { type: ".txt", label: "Texto", icon: "📝" },
+        { type: ".jpg", label: "JPEG", icon: "🖼️" },
+        { type: ".jpeg", label: "JPEG", icon: "🖼️" },
+        { type: ".png", label: "PNG", icon: "🖼️" },
+        { type: ".bmp", label: "BMP", icon: "🖼️" },
+        { type: ".tiff", label: "TIFF", icon: "🖼️" },
+        { type: ".tif", label: "TIFF", icon: "🖼️" },
+        { type: ".doc", label: "Word", icon: "📄" },
+        { type: ".docx", label: "Word", icon: "📄" },
+        { type: ".xls", label: "Excel", icon: "📊" },
+        { type: ".xlsx", label: "Excel", icon: "📊" },
+        { type: ".ppt", label: "PowerPoint", icon: "📽️" },
+        { type: ".pptx", label: "PowerPoint", icon: "📽️" },
     ];
 
     const handleFileChange = (e) => {
-        const file = e.target.files[0];
-        if (file) {
-            setSelectedFile(file);
+        const files = Array.from(e.target.files || []);
+        if (files.length > 0) {
+            setSelectedFiles(files);
             setDownloadInfo(null);
+        } else {
+            setSelectedFiles([]);
         }
     };
 
     const handleConvert = async () => {
-        if (!selectedFile) {
-            alert('Selecciona un archivo primero');
+        if (!selectedFiles || selectedFiles.length === 0) {
+            alert("Selecciona al menos un archivo primero");
             return;
         }
 
@@ -35,95 +46,127 @@ const Convert = () => {
         setDownloadInfo(null);
 
         try {
-            const convertedBlob = await PDFConverter.convertToPDF(selectedFile);
-            const url = URL.createObjectURL(convertedBlob);
-            const fileName = `convertido_${selectedFile.name.replace(/\.[^/.]+$/, "")}.pdf`;
+            const resultBlob = await PDFConverter.convertToPDF(selectedFiles);
+
+            const isSingle = selectedFiles.length === 1;
+            let fileName;
+
+            if (isSingle) {
+                const baseName = selectedFiles[0].name.replace(/\.[^/.]+$/, "");
+                fileName = `convertido_${baseName}.pdf`;
+            } else {
+                fileName = `convertidos_${new Date()
+                    .toISOString()
+                    .replace(/[:.]/g, "-")}.zip`;
+            }
+
+            saveAs(resultBlob, fileName);
 
             setDownloadInfo({
-                url,
                 fileName,
-                originalType: selectedFile.name.split('.').pop().toUpperCase()
+                count: selectedFiles.length,
+                isZip: !isSingle,
+                originalTypes: selectedFiles.map((f) =>
+                    f.name.split(".").pop().toUpperCase(),
+                ),
             });
-
-            saveAs(convertedBlob, fileName);
-
         } catch (error) {
             setDownloadInfo({
                 error: true,
-                message: error.message
+                message: error.message,
             });
         } finally {
             setIsProcessing(false);
         }
     };
 
-    const getAcceptedTypes = () => {
-        return supportedFormats.map(f => f.type).join(', ');
-    };
+    const getAcceptedTypes = () =>
+        supportedFormats.map((f) => f.type).join(", ");
 
     return (
-        <div className="convert">
-            <div className="convert-header">
-                <h1>Convertir a PDF</h1>
-                <p>Transforma archivos a formato PDF</p>
-            </div>
+        <div className="convert-container">
+            <div className="convert-card">
+                <h2>Transforma archivos a formato PDF</h2>
+                <p className="convert-description">
+                    Sube uno o varios archivos y obtén sus versiones en PDF.
+                    Imágenes, texto y documentos de Office son compatibles.
+                </p>
 
-            <div className="convert-content">
-                <div className="upload-section">
-                    <div className="upload-area">
-                        <input
-                            type="file"
-                            id="convert-upload"
-                            accept={getAcceptedTypes()}
-                            onChange={handleFileChange}
-                            className="file-input"
-                        />
-                        <label htmlFor="convert-upload" className="upload-label">
-                            <div className="upload-icon">📄</div>
-                            <h3>Selecciona un archivo</h3>
-                            <p>Arrastra o haz clic para seleccionar</p>
-                            {selectedFile && (
-                                <div className="file-selected">
-                                    <strong>{selectedFile.name}</strong>
-                                </div>
-                            )}
-                        </label>
-                    </div>
+                <div className="convert-upload-section">
+                    <label htmlFor="file-input" className="convert-upload-label">
+                        <span>Seleccionar archivo(s)</span>
+                        <small>Puedes elegir múltiples archivos a la vez</small>
+                    </label>
+                    <input
+                        id="file-input"
+                        type="file"
+                        multiple
+                        accept={getAcceptedTypes()}
+                        onChange={handleFileChange}
+                    />
+
+                    {selectedFiles.length > 0 && (
+                        <div className="convert-file-list">
+                            <p>
+                                Archivos seleccionados: <strong>{selectedFiles.length}</strong>
+                            </p>
+                            <ul>
+                                {selectedFiles.map((file) => (
+                                    <li key={file.name}>
+                                        {file.name}{" "}
+                                        <span className="file-size">
+                                            ({(file.size / (1024 * 1024)).toFixed(2)} MB)
+                                        </span>
+                                    </li>
+                                ))}
+                            </ul>
+                        </div>
+                    )}
                 </div>
 
-                {selectedFile && (
-                    <div className="action-section">
-                        <button
-                            className={`btn convert-btn ${isProcessing ? 'processing' : ''}`}
-                            onClick={handleConvert}
-                            disabled={isProcessing}
-                        >
-                            {isProcessing ? 'Convirtiendo...' : 'Convertir a PDF'}
-                        </button>
-                    </div>
-                )}
+                <button
+                    className="convert-button"
+                    onClick={handleConvert}
+                    disabled={isProcessing || selectedFiles.length === 0}
+                >
+                    {isProcessing ? "Convirtiendo..." : "Convertir a PDF"}
+                </button>
 
                 {downloadInfo && (
-                    <div className={`result-section ${downloadInfo.error ? 'error' : 'success'}`}>
+                    <div
+                        className={`convert-result ${downloadInfo.error ? "error" : "success"
+                            }`}
+                    >
                         {downloadInfo.error ? (
-                            <div className="result-content">
-                                <h3>Error</h3>
-                                <p>{downloadInfo.message}</p>
-                                <button className="btn" onClick={handleConvert}>
-                                    Intentar nuevamente
-                                </button>
-                            </div>
+                            <p>{downloadInfo.message}</p>
                         ) : (
-                            <div className="result-content">
-                                <h3>Conversión exitosa</h3>
-                                <p>Archivo convertido a PDF</p>
-                                <button className="btn btn-success" onClick={() => saveAs(downloadInfo.url, downloadInfo.fileName)}>
-                                    Descargar PDF
-                                </button>
-                            </div>
+                            <>
+                                <p>
+                                    {downloadInfo.isZip
+                                        ? `Se convirtieron ${downloadInfo.count} archivos.`
+                                        : "Archivo convertido a PDF."}
+                                </p>
+                                <p className="convert-filename">
+                                    Archivo descargado: <strong>{downloadInfo.fileName}</strong>
+                                </p>
+                            </>
                         )}
                     </div>
                 )}
+
+                <div className="convert-supported">
+                    <h3>Formatos soportados</h3>
+                    <ul>
+                        {supportedFormats.map((fmt) => (
+                            <li key={fmt.type}>
+                                <span className="icon">{fmt.icon}</span>
+                                <span className="label">
+                                    {fmt.label} ({fmt.type})
+                                </span>
+                            </li>
+                        ))}
+                    </ul>
+                </div>
             </div>
         </div>
     );

@@ -1,7 +1,6 @@
 {
   "name": "al-pdf",
   "version": "1.0.0",
-  "homepage": "/al-pdf",
   "description": "Aplicación web para manipulación de PDFs",
   "main": "src/index.js",
   "scripts": {
