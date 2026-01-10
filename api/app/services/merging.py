@@ -12,3 +12,8 @@ def merge_pdfs(input_paths: list, output_path: str):
     
     merged_doc.save(output_path, garbage=4, deflate=True, clean=True)
     merged_doc.close()
+
+
+# Alias para compatibilidad con main.py
+def mergepdfs(input_paths: list, output_path: str):
+    return merge_pdfs(input_paths, output_path)

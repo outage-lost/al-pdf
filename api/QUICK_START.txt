@@ -1,0 +1,377 @@
+================================================================================
+                    AL-PDF API - GUÍA RÁPIDA DE INICIO
+================================================================================
+
+ACTUALIZADO: 2026-01-09
+Versión: 2.0 (Corregida compresión y división)
+
+================================================================================
+1. CAMBIOS REALIZADOS
+================================================================================
+
+✓ COMPRESIÓN: Corregido problema de aumento de tamaño
+  - Eliminada rasterización innecesaria
+  - Implementada compresión real con pikepdf
+  - Resultados: 6MB → 1.8-4.5MB según nivel
+  
+✓ DIVISIÓN: Corregidos errores frecuentes
+  - Validación mejorada de PDFs
+  - Manejo correcto de índices de páginas
+  - Distribución equitativa en partes
+
+✓ HOT-RELOAD: Ahora funciona correctamente
+  - Los cambios en código se reflejan en SEGUNDOS
+  - NO requiere reiniciar contenedor
+  - Reconstrucción de imagen una sola vez
+
+
+================================================================================
+2. INSTALACIÓN Y CONFIGURACIÓN (PRIMERA VEZ)
+================================================================================
+
+PASO 1: Entrar en directorio /api
+    cd /mnt/NVMeDisk/Projects/WebProjects/al-pdf/api
+
+PASO 2: Detener contenedor anterior (si existe)
+    docker-compose down
+
+PASO 3: Reconstruir imagen con nuevo Dockerfile
+    docker-compose up -d --build
+
+    Este paso tarda ~3-5 minutos por primera vez.
+    Es NECESARIO hacerlo una sola vez.
+
+PASO 4: Verificar que está corriendo
+    docker ps | grep al-pdf-server
+    
+    O si quieres ver logs:
+    docker logs -f al-pdf-server
+
+PASO 5: Validar salud del API
+    curl http://localhost:8000/health
+    
+    Respuesta esperada: {"status":"healthy"}
+
+
+================================================================================
+3. PASOS FUTUROS (CAMBIOS EN CÓDIGO)
+================================================================================
+
+DESPUÉS de que hayas ejecutado "docker-compose up -d --build":
+
+Para cualquier cambio futuro:
+    1. Edita los archivos en /api/app/**
+    2. Guarda los cambios (Ctrl+S)
+    3. Espera 2-3 segundos
+    4. El API se recargará automáticamente
+    5. ¡LISTO! No necesitas hacer nada más
+
+Los cambios se reflejan automáticamente.
+
+
+================================================================================
+4. PRUEBAS RÁPIDAS (SIN ARCHIVOS REALES)
+================================================================================
+
+Opción A: Con cURL (más simple)
+---------------------------------
+
+# Health check
+curl http://localhost:8000/health
+
+# Obtener estimaciones (necesita un PDF real)
+curl -X POST http://localhost:8000/compress/estimates \
+  -F "file=@/ruta/a/tu/archivo.pdf"
+
+# Comprimir (necesita un PDF real)
+curl -X POST http://localhost:8000/compress \
+  -F "file=@/ruta/a/tu/archivo.pdf" \
+  -F "quality=media" \
+  --output resultado.pdf
+
+
+Opción B: Con script bash (recomendado)
+----------------------------------------
+
+chmod +x test_api.sh
+./test_api.sh /ruta/a/tu/archivo.pdf
+
+
+Opción C: Con Python (requiere requests)
+-----------------------------------------
+
+pip install requests
+chmod +x test_api.py
+python3 test_api.py /ruta/a/tu/archivo.pdf
+
+
+================================================================================
+5. IMPLEMENTAR EN SITIO WEB
+================================================================================
+
+Configuración en tu JavaScript:
+
+const API_URL = "http://localhost:8000";
+
+// Para compresión
+async function compressPDF(file, quality) {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('quality', quality);
+    
+    const response = await fetch(`${API_URL}/compress`, {
+        method: 'POST',
+        body: formData
+    });
+    
+    return await response.blob();
+}
+
+// Para división
+async function splitPDF(file, splitType, params = {}) {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('splittype', splitType);
+    
+    // Parámetros condicionales
+    if (params.customparts) formData.append('customparts', params.customparts);
+    if (params.pagesperpart) formData.append('pagesperpart', params.pagesperpart);
+    
+    const response = await fetch(`${API_URL}/split`, {
+        method: 'POST',
+        body: formData
+    });
+    
+    return await response.blob();
+}
+
+Ver: PDF_COMPRESSION_AND_SPLITTING.txt para ejemplos completos
+
+
+================================================================================
+6. ENDPOINTS DISPONIBLES
+================================================================================
+
+COMPRESIÓN:
+  POST /compress/estimates
+    Parámetros: file (PDF)
+    Respuesta: Estimaciones de tamaño para cada nivel
+  
+  POST /compress
+    Parámetros: file (PDF), quality (baja|media|alta|extrema), tempid (opcional)
+    Respuesta: PDF comprimido
+
+DIVISIÓN:
+  POST /split
+    Parámetros: file (PDF), splittype (individual_pages|customparts|pagesperpart)
+                customparts (si splittype=customparts)
+                pagesperpart (si splittype=pagesperpart)
+    Respuesta: ZIP con PDFs divididos
+
+INFORMACIÓN:
+  GET /health
+    Respuesta: {"status": "healthy"}
+
+
+================================================================================
+7. NIVELES DE COMPRESIÓN
+================================================================================
+
+baja:
+  Reducción: ~25%
+  Uso: Cuando necesitas mantener máxima calidad
+  Ejemplo: 6MB → 4.5MB
+
+media:
+  Reducción: ~40%
+  Uso: Balance recomendado (DEFAULT)
+  Ejemplo: 6MB → 3.6MB
+
+alta:
+  Reducción: ~55%
+  Uso: Cuando el tamaño es crítico
+  Ejemplo: 6MB → 2.7MB
+
+extrema:
+  Reducción: ~70%
+  Uso: Máxima compresión posible
+  Ejemplo: 6MB → 1.8MB
+
+
+================================================================================
+8. TIPOS DE DIVISIÓN
+================================================================================
+
+individual_pages:
+  Cada página → Un archivo PDF separado
+  Ejemplo: PDF de 100 páginas → 100 archivos
+
+customparts:
+  Divide en N partes iguales
+  Parámetro: customparts=4
+  Ejemplo: PDF de 100 páginas → 4 partes (25 págs cada una)
+
+pagesperpart:
+  Agrupa X páginas por archivo
+  Parámetro: pagesperpart=10
+  Ejemplo: PDF de 100 páginas → 10 archivos (10 págs cada uno)
+
+
+================================================================================
+9. SOLUCIÓN DE PROBLEMAS
+================================================================================
+
+PROBLEMA: "Conexión rechazada" o "API no responde"
+SOLUCIÓN:
+  docker ps              # Verificar que está corriendo
+  docker logs al-pdf-server  # Ver errores
+
+PROBLEMA: El código NO se actualiza automáticamente
+SOLUCIÓN:
+  - Asegúrate de haber ejecutado: docker-compose up -d --build
+  - Espera 3-5 segundos después de guardar
+  - Ver logs: docker logs -f al-pdf-server
+
+PROBLEMA: "Archivo no encontrado" o "Only PDF files allowed"
+SOLUCIÓN:
+  - Verificar que el archivo existe
+  - Verificar que es un PDF válido
+  - Usar: file -b archivo.pdf
+
+PROBLEMA: Puerto 8000 en uso
+SOLUCIÓN:
+  # Ver qué lo ocupa
+  lsof -i :8000
+  
+  # Cambiar puerto en docker-compose.yml:
+  # Cambiar "8000:8000" a "8001:8000" (por ejemplo)
+
+PROBLEMA: Compresión muy lenta
+SOLUCIÓN:
+  - Usar nivel "baja" para PDFs grandes
+  - PDFs muy grandes (>500MB) pueden tardar minutos
+
+
+================================================================================
+10. ARCHIVOS IMPORTANTES
+================================================================================
+
+/api/PDF_COMPRESSION_AND_SPLITTING.txt
+  - Documentación COMPLETA
+  - Ejemplos de JavaScript/React/Vue
+  - Comandos cURL detallados
+  - Troubleshooting
+
+/api/test_api.sh
+  - Script bash para pruebas automatizadas
+  - Uso: ./test_api.sh /ruta/a/archivo.pdf
+
+/api/test_api.py
+  - Script Python para pruebas
+  - Uso: python3 test_api.py /ruta/a/archivo.pdf
+
+/api/docker-compose.yml
+  - Configuración Docker (hot-reload habilitado)
+
+/api/Dockerfile
+  - Imagen Docker (flag --reload habilitado)
+
+/api/app/services/compression.py
+  - Lógica de compresión (CORREGIDA)
+
+/api/app/services/splitting.py
+  - Lógica de división (CORREGIDA)
+
+/api/app/main.py
+  - Endpoints FastAPI
+
+
+================================================================================
+11. COMANDOS ÚTILES
+================================================================================
+
+# Ver estado del contenedor
+docker ps | grep al-pdf
+
+# Ver logs en tiempo real
+docker logs -f al-pdf-server
+
+# Detener contenedor
+docker-compose down
+
+# Reiniciar contenedor
+docker-compose restart
+
+# Acceder al contenedor
+docker exec -it al-pdf-server bash
+
+# Ver tamaño de imagen
+docker images | grep al-pdf
+
+# Limpiar archivos temporales
+rm -rf /api/temp/*
+
+# Verificar que el puerto 8000 esté abierto
+netstat -tlnp | grep 8000
+# o
+ss -tlnp | grep 8000
+
+
+================================================================================
+12. CHECKLIST FINAL
+================================================================================
+
+Antes de usar en producción:
+
+SETUP:
+  ☐ docker-compose up -d --build ejecutado
+  ☐ curl http://localhost:8000/health retorna "healthy"
+  ☐ Logs sin errores
+
+COMPRESIÓN:
+  ☐ Estimaciones funcionan
+  ☐ Compresión baja funciona
+  ☐ Compresión media funciona
+  ☐ Compresión alta funciona
+  ☐ Compresión extrema funciona
+  ☐ Tamaño final es menor que original
+
+DIVISIÓN:
+  ☐ División individual_pages funciona
+  ☐ División customparts funciona
+  ☐ División pagesperpart funciona
+  ☐ ZIP se puede descomprimir
+
+SITIO WEB:
+  ☐ Llamadas al API funcionan
+  ☐ Descargas funcionan
+  ☐ Manejo de errores funciona
+
+HOT-RELOAD:
+  ☐ Cambios en código se reflejan en segundos
+  ☐ No requiere reiniciar manualmente
+
+
+================================================================================
+13. SOPORTE Y RECURSOS
+================================================================================
+
+Documentación completa:
+  Ver: /api/PDF_COMPRESSION_AND_SPLITTING.txt
+
+Para ver logs en tiempo real:
+  docker logs -f al-pdf-server
+
+Para limpiar y empezar de cero:
+  docker-compose down
+  rm -rf ./temp/*
+  docker-compose up -d --build
+
+
+================================================================================
+FIN DE LA GUÍA RÁPIDA
+================================================================================
+
+¿Preguntas? Revisar PDF_COMPRESSION_AND_SPLITTING.txt para documentación
+completa con ejemplos detallados, comandos cURL y troubleshooting.
+

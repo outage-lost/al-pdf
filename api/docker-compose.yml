@@ -4,10 +4,12 @@ services:
   pdf-server:
     build: .
     container_name: al-pdf-server
-    network_mode: "host"  # ✅ ESTA LÍNEA ES CRÍTICA
+    network_mode: "host"
     volumes:
       - ./temp:/app/temp
+      - ./app:/app/app  # ✅ HOT-RELOAD: Montar el directorio de código fuente
     environment:
       - PYTHONPATH=/app
       - TEMP_DIR=/app/temp
+      - PYTHONUNBUFFERED=1  # ✅ Asegurar que los logs se vean en tiempo real
     restart: unless-stopped

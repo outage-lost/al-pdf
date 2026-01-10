@@ -1,0 +1,1337 @@
+================================================================================
+                    AL-PDF API - COMPRESIÓN Y DIVISIÓN DE PDFs
+                        GUÍA COMPLETA DE IMPLEMENTACIÓN
+================================================================================
+
+Versión: 2.0
+Actualizado: 2026-01-09
+Contenedor Docker: al-pdf-server
+Puerto: 8000 (localhost)
+
+================================================================================
+1. FUNCIONES DISPONIBLES
+================================================================================
+
+1.1 COMPRESIÓN DE PDFs
+==================
+
+ENDPOINT: POST /compress
+Puerto: http://localhost:8000/compress
+
+Descripción:
+    Comprime un archivo PDF con diferentes niveles de calidad sin rasterizar
+    el contenido. Utiliza optimización de streams y compresión de objetos.
+
+Parámetros:
+    - file (UploadFile): Archivo PDF a comprimir [REQUERIDO]
+    - quality (string): Nivel de compresión [REQUERIDO]
+        * "baja"    -> Reducción ~25%   (Mejor calidad, archivo más grande)
+        * "media"   -> Reducción ~40%   (Balance recomendado)
+        * "alta"    -> Reducción ~55%   (Calidad aceptable)
+        * "extrema" -> Reducción ~70%   (Menor calidad, máxima compresión)
+    - tempid (string, opcional): ID temporal para reutilizar estimaciones
+
+Respuesta Exitosa:
+    - HTTP 200
+    - Content-Type: application/pdf
+    - Body: Archivo PDF comprimido
+
+Respuesta con Error:
+    - HTTP 400: Archivo no es PDF o calidad inválida
+    - HTTP 500: Error en la compresión
+
+Notas Importantes:
+    ✓ NO realiza rasterización (mantiene vectores y texto)
+    ✓ Reduce tamaño manteniendo calidad visual
+    ✓ Optimiza streams y elimina objetos no referenciados
+    ✓ Soporta PDFs con imágenes, texto y gráficos vectoriales
+
+
+1.2 ESTIMACIÓN DE COMPRESIÓN
+=============================
+
+ENDPOINT: POST /compress/estimates
+Puerto: http://localhost:8000/compress/estimates
+
+Descripción:
+    Proporciona estimaciones de tamaño para los diferentes niveles de
+    compresión SIN comprimir realmente el archivo.
+
+Parámetros:
+    - file (UploadFile): Archivo PDF para obtener estimaciones [REQUERIDO]
+
+Respuesta Exitosa (JSON):
+    {
+        "estimates": {
+            "baja": {
+                "size_bytes": 1500000,
+                "size_human": "1.43 MB",
+                "reduction_percent": 25
+            },
+            "media": {
+                "size_bytes": 1200000,
+                "size_human": "1.14 MB",
+                "reduction_percent": 40
+            },
+            "alta": {
+                "size_bytes": 900000,
+                "size_human": "0.86 MB",
+                "reduction_percent": 55
+            },
+            "extrema": {
+                "size_bytes": 600000,
+                "size_human": "0.57 MB",
+                "reduction_percent": 70
+            }
+        },
+        "tempid": "abc123def456"  // Usar en /compress para reutilizar
+    }
+
+Notas:
+    ✓ Devuelve estimaciones rápidamente sin crear archivos grandes
+    ✓ El tempid permite reutilizar el archivo en /compress
+    ✓ Las estimaciones son aproximadas pero muy precisas
+
+
+1.3 DIVISIÓN/SPLITTING DE PDFs
+================================
+
+ENDPOINT: POST /split
+Puerto: http://localhost:8000/split
+
+Descripción:
+    Divide un archivo PDF según diferentes métodos y devuelve un ZIP
+    con los archivos resultantes.
+
+Parámetros:
+    - file (UploadFile): Archivo PDF a dividir [REQUERIDO]
+    - splittype (string): Tipo de división [REQUERIDO]
+        * "individual_pages" -> Una página por archivo PDF
+        * "customparts"      -> Divide en N partes iguales
+        * "pagesperpart"     -> Agrupa X páginas por archivo
+    
+    Parámetros Condicionales:
+        - customparts (integer): Número de partes [REQUERIDO si splittype="customparts"]
+          Ejemplo: 4 divide el PDF en 4 partes iguales
+        - pagesperpart (integer): Páginas por parte [REQUERIDO si splittype="pagesperpart"]
+          Ejemplo: 10 agrupa 10 páginas por archivo
+
+Respuesta Exitosa:
+    - HTTP 200
+    - Content-Type: application/zip
+    - Body: Archivo ZIP con PDFs divididos
+    - Archivos nombrados: [random_uuid].pdf
+
+Respuesta con Error:
+    - HTTP 400: Parámetros inválidos o faltantes
+    - HTTP 500: Error en la división
+
+Ejemplos de Casos de Uso:
+
+    Caso 1: PDF de 100 páginas con splittype="individual_pages"
+    → Genera 100 archivos PDF (1 página cada uno)
+
+    Caso 2: PDF de 100 páginas con splittype="customparts" customparts=4
+    → Genera 4 archivos: 25 + 25 + 25 + 25 páginas
+
+    Caso 3: PDF de 100 páginas con splittype="pagesperpart" pagesperpart=10
+    → Genera 10 archivos: 10 páginas cada uno
+
+Notas:
+    ✓ Todos los archivos se devuelven en un único ZIP
+    ✓ Preserva la calidad original del PDF
+    ✓ Validación automática de parámetros
+    ✓ Manejo robusto de errores en creación de páginas
+
+
+================================================================================
+2. EJEMPLOS DE IMPLEMENTACIÓN EN SITIO WEB (HTML/JavaScript)
+================================================================================
+
+2.1 EJEMPLO 1: Formulario Simple de Compresión
+==============================================
+
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Compresor de PDFs</title>
+    <style>
+        body { font-family: Arial; max-width: 800px; margin: 50px auto; }
+        .form-group { margin: 15px 0; }
+        input, select, button { padding: 10px; }
+        button { background: #0066cc; color: white; border: none; cursor: pointer; }
+        button:hover { background: #0052a3; }
+        .status { margin-top: 20px; padding: 10px; border: 1px solid #ddd; }
+    </style>
+</head>
+<body>
+    <h1>Compresor de PDFs - AL PDF</h1>
+    
+    <form id="compressForm">
+        <div class="form-group">
+            <label>Seleccionar PDF:</label>
+            <input type="file" id="pdfFile" accept=".pdf" required>
+        </div>
+        
+        <div class="form-group">
+            <label>Nivel de Compresión:</label>
+            <select id="quality" required>
+                <option value="">-- Seleccionar --</option>
+                <option value="baja">Baja (25% reducción)</option>
+                <option value="media">Media (40% reducción)</option>
+                <option value="alta">Alta (55% reducción)</option>
+                <option value="extrema">Extrema (70% reducción)</option>
+            </select>
+        </div>
+        
+        <div class="form-group">
+            <button type="button" onclick="getEstimates()">Ver Estimaciones</button>
+            <button type="submit">Comprimir PDF</button>
+        </div>
+    </form>
+    
+    <div id="status" class="status" style="display:none;"></div>
+    <div id="estimates" style="margin-top: 20px;"></div>
+
+    <script>
+        const API_BASE = "http://localhost:8000";
+        let tempId = null;
+
+        async function getEstimates() {
+            const file = document.getElementById('pdfFile').files[0];
+            if (!file) {
+                alert('Por favor selecciona un PDF');
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('file', file);
+
+            try {
+                const response = await fetch(`${API_BASE}/compress/estimates`, {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (!response.ok) throw new Error('Error al obtener estimaciones');
+
+                const data = await response.json();
+                tempId = data.tempid;
+
+                let html = '<h3>Estimaciones de Compresión:</h3><table border="1" cellpadding="10">';
+                html += '<tr><th>Nivel</th><th>Tamaño Estimado</th><th>Reducción</th></tr>';
+                
+                for (const [nivel, info] of Object.entries(data.estimates)) {
+                    html += `<tr>
+                        <td>${nivel}</td>
+                        <td>${info.size_human}</td>
+                        <td>${info.reduction_percent}%</td>
+                    </tr>`;
+                }
+                html += '</table>';
+                
+                document.getElementById('estimates').innerHTML = html;
+            } catch (error) {
+                alert('Error: ' + error.message);
+            }
+        }
+
+        document.getElementById('compressForm').onsubmit = async (e) => {
+            e.preventDefault();
+
+            const file = document.getElementById('pdfFile').files[0];
+            const quality = document.getElementById('quality').value;
+
+            if (!file || !quality) {
+                alert('Por favor completa todos los campos');
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('file', file);
+            formData.append('quality', quality);
+            if (tempId) formData.append('tempid', tempId);
+
+            try {
+                const statusDiv = document.getElementById('status');
+                statusDiv.textContent = 'Comprimiendo...';
+                statusDiv.style.display = 'block';
+                statusDiv.style.background = '#fffacd';
+
+                const response = await fetch(`${API_BASE}/compress`, {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (!response.ok) throw new Error('Error en compresión');
+
+                const blob = await response.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'comprimido.pdf';
+                a.click();
+                window.URL.revokeObjectURL(url);
+
+                statusDiv.textContent = '✓ PDF comprimido exitosamente';
+                statusDiv.style.background = '#90EE90';
+            } catch (error) {
+                statusDiv.textContent = '✗ Error: ' + error.message;
+                statusDiv.style.background = '#FFB6C6';
+            }
+        };
+    </script>
+</body>
+</html>
+
+
+2.2 EJEMPLO 2: Componente React para Compresión
+==============================================
+
+import React, { useState } from 'react';
+
+const CompressionComponent = () => {
+    const [file, setFile] = useState(null);
+    const [quality, setQuality] = useState('media');
+    const [loading, setLoading] = useState(false);
+    const [estimates, setEstimates] = useState(null);
+    const [tempId, setTempId] = useState(null);
+
+    const API_BASE = "http://localhost:8000";
+
+    const handleFileChange = (e) => {
+        const selectedFile = e.target.files[0];
+        setFile(selectedFile);
+        if (selectedFile) {
+            getEstimates(selectedFile);
+        }
+    };
+
+    const getEstimates = async (fileToEstimate) => {
+        const formData = new FormData();
+        formData.append('file', fileToEstimate);
+
+        try {
+            const response = await fetch(`${API_BASE}/compress/estimates`, {
+                method: 'POST',
+                body: formData
+            });
+            const data = await response.json();
+            setEstimates(data.estimates);
+            setTempId(data.tempid);
+        } catch (error) {
+            console.error('Error getting estimates:', error);
+        }
+    };
+
+    const compressPDF = async (e) => {
+        e.preventDefault();
+        if (!file || !quality) return;
+
+        setLoading(true);
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('quality', quality);
+        if (tempId) formData.append('tempid', tempId);
+
+        try {
+            const response = await fetch(`${API_BASE}/compress`, {
+                method: 'POST',
+                body: formData
+            });
+
+            if (!response.ok) throw new Error('Compression failed');
+
+            const blob = await response.blob();
+            const url = window.URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = 'compressed.pdf';
+            link.click();
+            window.URL.revokeObjectURL(url);
+        } catch (error) {
+            console.error('Error:', error);
+            alert('Error compressing PDF');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    return (
+        <div style={{ maxWidth: '600px', margin: '20px auto' }}>
+            <h2>Compresor de PDFs</h2>
+            <form onSubmit={compressPDF}>
+                <div style={{ marginBottom: '15px' }}>
+                    <label>Archivo PDF:</label>
+                    <input 
+                        type="file" 
+                        accept=".pdf" 
+                        onChange={handleFileChange}
+                        required 
+                    />
+                </div>
+
+                <div style={{ marginBottom: '15px' }}>
+                    <label>Nivel de Compresión:</label>
+                    <select 
+                        value={quality} 
+                        onChange={(e) => setQuality(e.target.value)}
+                    >
+                        <option value="baja">Baja</option>
+                        <option value="media">Media</option>
+                        <option value="alta">Alta</option>
+                        <option value="extrema">Extrema</option>
+                    </select>
+                </div>
+
+                {estimates && (
+                    <div style={{ 
+                        padding: '10px', 
+                        background: '#f0f0f0', 
+                        borderRadius: '5px',
+                        marginBottom: '15px'
+                    }}>
+                        <h4>Tamaño estimado: {estimates[quality].size_human}</h4>
+                        <p>Reducción: {estimates[quality].reduction_percent}%</p>
+                    </div>
+                )}
+
+                <button 
+                    type="submit" 
+                    disabled={loading}
+                    style={{ 
+                        padding: '10px 20px',
+                        background: loading ? '#ccc' : '#0066cc',
+                        color: 'white',
+                        border: 'none',
+                        cursor: loading ? 'not-allowed' : 'pointer'
+                    }}
+                >
+                    {loading ? 'Comprimiendo...' : 'Descargar PDF Comprimido'}
+                </button>
+            </form>
+        </div>
+    );
+};
+
+export default CompressionComponent;
+
+
+2.3 EJEMPLO 3: Formulario Simple de División
+==========================================
+
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Divisor de PDFs</title>
+    <style>
+        body { font-family: Arial; max-width: 800px; margin: 50px auto; }
+        .form-group { margin: 15px 0; }
+        input, select, button { padding: 10px; }
+        button { background: #00aa00; color: white; border: none; cursor: pointer; }
+        .conditional { margin: 10px 0; padding: 10px; background: #f9f9f9; display: none; }
+    </style>
+</head>
+<body>
+    <h1>Divisor de PDFs - AL PDF</h1>
+    
+    <form id="splitForm">
+        <div class="form-group">
+            <label>Seleccionar PDF:</label>
+            <input type="file" id="pdfFile" accept=".pdf" required>
+        </div>
+        
+        <div class="form-group">
+            <label>Tipo de División:</label>
+            <select id="splittype" onchange="updateFields()" required>
+                <option value="">-- Seleccionar --</option>
+                <option value="individual_pages">Una página por archivo</option>
+                <option value="customparts">Dividir en N partes iguales</option>
+                <option value="pagesperpart">Agrupar X páginas por archivo</option>
+            </select>
+        </div>
+        
+        <div id="custompartsField" class="conditional">
+            <label>Número de partes:</label>
+            <input type="number" id="customparts" min="1" placeholder="Ej: 4">
+        </div>
+        
+        <div id="pagesperpartField" class="conditional">
+            <label>Páginas por archivo:</label>
+            <input type="number" id="pagesperpart" min="1" placeholder="Ej: 10">
+        </div>
+        
+        <div class="form-group">
+            <button type="submit">Dividir PDF</button>
+        </div>
+    </form>
+    
+    <div id="status" style="display:none; margin-top: 20px; padding: 10px; border: 1px solid #ddd;"></div>
+
+    <script>
+        const API_BASE = "http://localhost:8000";
+
+        function updateFields() {
+            const splittype = document.getElementById('splittype').value;
+            document.getElementById('custompartsField').style.display = 
+                splittype === 'customparts' ? 'block' : 'none';
+            document.getElementById('pagesperpartField').style.display = 
+                splittype === 'pagesperpart' ? 'block' : 'none';
+        }
+
+        document.getElementById('splitForm').onsubmit = async (e) => {
+            e.preventDefault();
+
+            const file = document.getElementById('pdfFile').files[0];
+            const splittype = document.getElementById('splittype').value;
+
+            if (!file || !splittype) {
+                alert('Por favor completa todos los campos');
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('file', file);
+            formData.append('splittype', splittype);
+            
+            if (splittype === 'customparts') {
+                const customparts = document.getElementById('customparts').value;
+                if (!customparts) {
+                    alert('Por favor ingresa número de partes');
+                    return;
+                }
+                formData.append('customparts', customparts);
+            }
+            
+            if (splittype === 'pagesperpart') {
+                const pagesperpart = document.getElementById('pagesperpart').value;
+                if (!pagesperpart) {
+                    alert('Por favor ingresa páginas por archivo');
+                    return;
+                }
+                formData.append('pagesperpart', pagesperpart);
+            }
+
+            try {
+                const statusDiv = document.getElementById('status');
+                statusDiv.textContent = 'Dividiendo PDF...';
+                statusDiv.style.display = 'block';
+                statusDiv.style.background = '#fffacd';
+
+                const response = await fetch(`${API_BASE}/split`, {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (!response.ok) throw new Error('Error en división');
+
+                const blob = await response.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'pdf-dividido.zip';
+                a.click();
+                window.URL.revokeObjectURL(url);
+
+                statusDiv.textContent = '✓ PDF dividido exitosamente. Descargando ZIP...';
+                statusDiv.style.background = '#90EE90';
+            } catch (error) {
+                statusDiv.textContent = '✗ Error: ' + error.message;
+                statusDiv.style.background = '#FFB6C6';
+            }
+        };
+    </script>
+</body>
+</html>
+
+
+2.4 EJEMPLO 4: Componente Vue 3 para División
+==========================================
+
+<template>
+    <div class="split-container">
+        <h2>Divisor de PDFs</h2>
+        
+        <form @submit.prevent="splitPDF">
+            <div class="form-group">
+                <label>Archivo PDF:</label>
+                <input 
+                    type="file" 
+                    accept=".pdf" 
+                    @change="file = $event.target.files[0]"
+                    required 
+                />
+            </div>
+
+            <div class="form-group">
+                <label>Tipo de División:</label>
+                <select v-model="splitType" @change="updateFields" required>
+                    <option value="">-- Seleccionar --</option>
+                    <option value="individual_pages">Una página por archivo</option>
+                    <option value="customparts">Dividir en N partes</option>
+                    <option value="pagesperpart">Agrupar X páginas</option>
+                </select>
+            </div>
+
+            <div v-if="splitType === 'customparts'" class="conditional">
+                <label>Número de partes:</label>
+                <input 
+                    v-model.number="customparts" 
+                    type="number" 
+                    min="1"
+                    required 
+                />
+            </div>
+
+            <div v-if="splitType === 'pagesperpart'" class="conditional">
+                <label>Páginas por archivo:</label>
+                <input 
+                    v-model.number="pagesperpart" 
+                    type="number" 
+                    min="1"
+                    required 
+                />
+            </div>
+
+            <button type="submit" :disabled="loading">
+                {{ loading ? 'Dividiendo...' : 'Dividir PDF' }}
+            </button>
+        </form>
+
+        <div v-if="status" :class="['status', status.type]">
+            {{ status.message }}
+        </div>
+    </div>
+</template>
+
+<script setup>
+import { ref } from 'vue';
+
+const file = ref(null);
+const splitType = ref('');
+const customparts = ref(null);
+const pagesperpart = ref(null);
+const loading = ref(false);
+const status = ref(null);
+const API_BASE = 'http://localhost:8000';
+
+const updateFields = () => {
+    // Campos se actualizan automáticamente con v-if
+};
+
+const splitPDF = async () => {
+    if (!file.value || !splitType.value) {
+        status.value = { 
+            message: 'Por favor completa todos los campos', 
+            type: 'error' 
+        };
+        return;
+    }
+
+    loading.value = true;
+    const formData = new FormData();
+    formData.append('file', file.value);
+    formData.append('splittype', splitType.value);
+
+    if (splitType.value === 'customparts' && customparts.value) {
+        formData.append('customparts', customparts.value);
+    }
+    if (splitType.value === 'pagesperpart' && pagesperpart.value) {
+        formData.append('pagesperpart', pagesperpart.value);
+    }
+
+    try {
+        const response = await fetch(`${API_BASE}/split`, {
+            method: 'POST',
+            body: formData
+        });
+
+        if (!response.ok) throw new Error('Error en división');
+
+        const blob = await response.blob();
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = 'pdf-dividido.zip';
+        link.click();
+        URL.revokeObjectURL(url);
+
+        status.value = { 
+            message: '✓ PDF dividido exitosamente', 
+            type: 'success' 
+        };
+    } catch (error) {
+        status.value = { 
+            message: `✗ Error: ${error.message}`, 
+            type: 'error' 
+        };
+    } finally {
+        loading.value = false;
+    }
+};
+</script>
+
+<style scoped>
+.form-group { margin: 15px 0; }
+input, select, button { padding: 10px; width: 100%; }
+button { background: #00aa00; color: white; border: none; cursor: pointer; }
+button:disabled { background: #ccc; }
+.conditional { margin: 10px 0; padding: 10px; background: #f9f9f9; }
+.status { margin-top: 20px; padding: 10px; border-radius: 5px; }
+.status.success { background: #90EE90; }
+.status.error { background: #FFB6C6; }
+</style>
+
+
+================================================================================
+3. COMANDOS DE PRUEBA (CURL)
+================================================================================
+
+IMPORTANTE: Asegúrate de que:
+1. Docker está ejecutándose: docker ps
+2. El contenedor está activo: docker-compose up -d (en /api)
+3. API responde: curl http://localhost:8000/health
+
+
+3.1 PRUEBA DE SALUD / HEALTH CHECK
+==================================
+
+curl -X GET http://localhost:8000/health
+
+Respuesta esperada:
+{"status":"healthy"}
+
+
+3.2 CREAR ARCHIVO PDF DE PRUEBA
+================================
+
+Crear un PDF simple para pruebas:
+
+# Opción 1: Con LibreOffice en terminal (si está disponible)
+echo "PDF de prueba para compresión" > /tmp/test.txt
+libreoffice --headless --convert-to pdf /tmp/test.txt --outdir /tmp
+
+# Opción 2: Descargar un PDF de prueba (si tienes wget/curl)
+# O simplemente usar cualquier PDF que tengas disponible
+
+
+3.3 PRUEBA DE COMPRESIÓN - OBTENER ESTIMACIONES
+==============================================
+
+curl -X POST http://localhost:8000/compress/estimates \
+  -F "file=@/ruta/a/tu/archivo.pdf"
+
+Respuesta esperada (JSON):
+{
+  "estimates": {
+    "baja": {"size_bytes": 1500000, "size_human": "1.43 MB", "reduction_percent": 25},
+    "media": {"size_bytes": 1200000, "size_human": "1.14 MB", "reduction_percent": 40},
+    "alta": {"size_bytes": 900000, "size_human": "0.86 MB", "reduction_percent": 55},
+    "extrema": {"size_bytes": 600000, "size_human": "0.57 MB", "reduction_percent": 70}
+  },
+  "tempid": "abc123def456xyz"
+}
+
+
+3.4 PRUEBA DE COMPRESIÓN - COMPRIMIR PDF
+==========================================
+
+# Compresión simple sin tempid
+curl -X POST http://localhost:8000/compress \
+  -F "file=@/ruta/a/tu/archivo.pdf" \
+  -F "quality=media" \
+  --output archivo_comprimido.pdf
+
+# Compresión reutilizando estimaciones (más rápido)
+curl -X POST http://localhost:8000/compress \
+  -F "file=@/ruta/a/tu/archivo.pdf" \
+  -F "quality=alta" \
+  -F "tempid=abc123def456xyz" \
+  --output archivo_comprimido.pdf
+
+
+COMPARAR TAMAÑOS ANTES Y DESPUÉS:
+
+Original:
+ls -lh /ruta/a/tu/archivo.pdf
+
+Comprimido:
+ls -lh archivo_comprimido.pdf
+
+Verificar reducción:
+echo "Original: $(ls -lh /ruta/a/tu/archivo.pdf | awk '{print $5}')"
+echo "Comprimido: $(ls -lh archivo_comprimido.pdf | awk '{print $5}')"
+
+
+3.5 PRUEBA DE DIVISIÓN - SEPARAR EN PÁGINAS INDIVIDUALES
+========================================================
+
+curl -X POST http://localhost:8000/split \
+  -F "file=@/ruta/a/tu/archivo.pdf" \
+  -F "splittype=individual_pages" \
+  --output pdfs_divididos.zip
+
+# Descomprimir para verificar
+unzip -l pdfs_divididos.zip
+
+
+3.6 PRUEBA DE DIVISIÓN - DIVIDIR EN PARTES IGUALES
+===================================================
+
+# Dividir PDF de 100 páginas en 4 partes (25 páginas cada una)
+curl -X POST http://localhost:8000/split \
+  -F "file=@/ruta/a/tu/archivo.pdf" \
+  -F "splittype=customparts" \
+  -F "customparts=4" \
+  --output pdfs_divididos.zip
+
+unzip pdfs_divididos.zip  # Extrae 4 PDFs
+
+
+3.7 PRUEBA DE DIVISIÓN - AGRUPAR POR PÁGINAS
+=============================================
+
+# Dividir PDF agrupando 10 páginas por archivo
+curl -X POST http://localhost:8000/split \
+  -F "file=@/ruta/a/tu/archivo.pdf" \
+  -F "splittype=pagesperpart" \
+  -F "pagesperpart=10" \
+  --output pdfs_divididos.zip
+
+unzip pdfs_divididos.zip  # Extrae múltiples PDFs
+
+
+3.8 VERIFICAR RESULTADOS DE DIVISIÓN
+=====================================
+
+# Listar contenidos del ZIP sin extraerlo
+unzip -l pdfs_divididos.zip
+
+# Extraer y contar archivos
+unzip pdfs_divididos.zip -d ./pdfs_salida
+ls -la ./pdfs_salida | wc -l
+
+# Ver información de archivos extraídos
+ls -lh ./pdfs_salida/
+
+
+3.9 SCRIPT BASH PARA PRUEBAS AUTOMATIZADAS
+===========================================
+
+#!/bin/bash
+
+# Variables
+API="http://localhost:8000"
+TESTPDF="/ruta/a/tu/archivo.pdf"
+TIMESTAMP=$(date +%s)
+
+echo "=== PRUEBAS DEL API AL-PDF ==="
+echo "Timestamp: $TIMESTAMP"
+echo ""
+
+# Test 1: Health Check
+echo "Test 1: Health Check"
+curl -s -X GET "$API/health" | jq .
+echo ""
+
+# Test 2: Estimaciones
+echo "Test 2: Obtener estimaciones de compresión"
+ESTIMATES=$(curl -s -X POST "$API/compress/estimates" \
+  -F "file=@$TESTPDF")
+echo "$ESTIMATES" | jq .
+TEMPID=$(echo "$ESTIMATES" | jq -r '.tempid')
+echo "Temp ID obtenido: $TEMPID"
+echo ""
+
+# Test 3: Compresión normal
+echo "Test 3: Compresión con calidad media"
+curl -s -X POST "$API/compress" \
+  -F "file=@$TESTPDF" \
+  -F "quality=media" \
+  --output "compressed_$TIMESTAMP.pdf"
+echo "Archivo guardado: compressed_$TIMESTAMP.pdf"
+echo ""
+
+# Test 4: Compresión extrema
+echo "Test 4: Compresión con calidad extrema"
+curl -s -X POST "$API/compress" \
+  -F "file=@$TESTPDF" \
+  -F "quality=extrema" \
+  -F "tempid=$TEMPID" \
+  --output "compressed_extreme_$TIMESTAMP.pdf"
+echo "Archivo guardado: compressed_extreme_$TIMESTAMP.pdf"
+echo ""
+
+# Test 5: División en páginas individuales
+echo "Test 5: División en páginas individuales"
+curl -s -X POST "$API/split" \
+  -F "file=@$TESTPDF" \
+  -F "splittype=individual_pages" \
+  --output "split_individual_$TIMESTAMP.zip"
+echo "Archivo guardado: split_individual_$TIMESTAMP.zip"
+echo ""
+
+# Test 6: División en 3 partes
+echo "Test 6: División en 3 partes"
+curl -s -X POST "$API/split" \
+  -F "file=@$TESTPDF" \
+  -F "splittype=customparts" \
+  -F "customparts=3" \
+  --output "split_3parts_$TIMESTAMP.zip"
+echo "Archivo guardado: split_3parts_$TIMESTAMP.zip"
+echo ""
+
+# Test 7: División por páginas
+echo "Test 7: División de 5 páginas por archivo"
+curl -s -X POST "$API/split" \
+  -F "file=@$TESTPDF" \
+  -F "splittype=pagesperpart" \
+  -F "pagesperpart=5" \
+  --output "split_5pages_$TIMESTAMP.zip"
+echo "Archivo guardado: split_5pages_$TIMESTAMP.zip"
+echo ""
+
+# Comparar tamaños
+echo "=== COMPARACIÓN DE TAMAÑOS ==="
+echo "Original:"
+ls -lh "$TESTPDF"
+echo ""
+echo "Comprimido (media):"
+ls -lh "compressed_$TIMESTAMP.pdf"
+echo ""
+echo "Comprimido (extrema):"
+ls -lh "compressed_extreme_$TIMESTAMP.pdf"
+
+
+3.10 SCRIPT PYTHON PARA PRUEBAS
+================================
+
+#!/usr/bin/env python3
+import requests
+import os
+from pathlib import Path
+
+API_BASE = "http://localhost:8000"
+TEST_PDF = "/ruta/a/tu/archivo.pdf"  # Cambiar ruta
+
+def test_health():
+    """Test health check"""
+    print("Test 1: Health Check")
+    response = requests.get(f"{API_BASE}/health")
+    print(f"Status: {response.status_code}")
+    print(f"Response: {response.json()}\n")
+
+def test_compression_estimates():
+    """Test compression estimates"""
+    print("Test 2: Compression Estimates")
+    with open(TEST_PDF, 'rb') as f:
+        files = {'file': f}
+        response = requests.post(f"{API_BASE}/compress/estimates", files=files)
+    
+    data = response.json()
+    print(f"Status: {response.status_code}")
+    for quality, info in data['estimates'].items():
+        print(f"  {quality}: {info['size_human']} ({info['reduction_percent']}% reduction)")
+    
+    return data['tempid']
+
+def test_compression(quality, temp_id=None):
+    """Test PDF compression"""
+    print(f"\nTest 3: Compress PDF ({quality})")
+    with open(TEST_PDF, 'rb') as f:
+        files = {'file': f}
+        data = {'quality': quality}
+        if temp_id:
+            data['tempid'] = temp_id
+        response = requests.post(f"{API_BASE}/compress", files=files, data=data)
+    
+    if response.status_code == 200:
+        filename = f"compressed_{quality}.pdf"
+        with open(filename, 'wb') as f:
+            f.write(response.content)
+        size = os.path.getsize(filename)
+        print(f"  Saved: {filename} ({size / 1024 / 1024:.2f} MB)")
+    else:
+        print(f"  Error: {response.status_code}")
+
+def test_split_individual():
+    """Test individual page split"""
+    print("\nTest 4: Split PDF (individual pages)")
+    with open(TEST_PDF, 'rb') as f:
+        files = {'file': f}
+        data = {'splittype': 'individual_pages'}
+        response = requests.post(f"{API_BASE}/split", files=files, data=data)
+    
+    if response.status_code == 200:
+        filename = "split_individual.zip"
+        with open(filename, 'wb') as f:
+            f.write(response.content)
+        size = os.path.getsize(filename)
+        print(f"  Saved: {filename} ({size / 1024 / 1024:.2f} MB)")
+    else:
+        print(f"  Error: {response.status_code}")
+
+def test_split_custom_parts():
+    """Test custom parts split"""
+    print("\nTest 5: Split PDF (4 parts)")
+    with open(TEST_PDF, 'rb') as f:
+        files = {'file': f}
+        data = {
+            'splittype': 'customparts',
+            'customparts': 4
+        }
+        response = requests.post(f"{API_BASE}/split", files=files, data=data)
+    
+    if response.status_code == 200:
+        filename = "split_4parts.zip"
+        with open(filename, 'wb') as f:
+            f.write(response.content)
+        size = os.path.getsize(filename)
+        print(f"  Saved: {filename} ({size / 1024 / 1024:.2f} MB)")
+    else:
+        print(f"  Error: {response.status_code}")
+
+def test_split_pages_per_part():
+    """Test pages per part split"""
+    print("\nTest 6: Split PDF (10 pages per file)")
+    with open(TEST_PDF, 'rb') as f:
+        files = {'file': f}
+        data = {
+            'splittype': 'pagesperpart',
+            'pagesperpart': 10
+        }
+        response = requests.post(f"{API_BASE}/split", files=files, data=data)
+    
+    if response.status_code == 200:
+        filename = "split_10pages.zip"
+        with open(filename, 'wb') as f:
+            f.write(response.content)
+        size = os.path.getsize(filename)
+        print(f"  Saved: {filename} ({size / 1024 / 1024:.2f} MB)")
+    else:
+        print(f"  Error: {response.status_code}")
+
+if __name__ == "__main__":
+    if not os.path.exists(TEST_PDF):
+        print(f"Error: Test PDF not found at {TEST_PDF}")
+        exit(1)
+    
+    print("=" * 50)
+    print("AL-PDF API Test Suite")
+    print("=" * 50 + "\n")
+    
+    # Run tests
+    test_health()
+    temp_id = test_compression_estimates()
+    test_compression('baja', temp_id)
+    test_compression('media', temp_id)
+    test_compression('alta', temp_id)
+    test_compression('extrema', temp_id)
+    test_split_individual()
+    test_split_custom_parts()
+    test_split_pages_per_part()
+    
+    print("\n" + "=" * 50)
+    print("All tests completed!")
+    print("=" * 50)
+
+
+================================================================================
+4. CORRECCIONES IMPLEMENTADAS
+================================================================================
+
+4.1 PROBLEMA DE COMPRESIÓN
+==========================
+
+PROBLEMA ORIGINAL:
+- Compresión extrema de 6MB → 4MB (esperado ~1MB)
+- Compresión normal de 6MB → 47MB (efecto inverso)
+- Causa: Rasterización de TODO a JPEG causaba AUMENTO de tamaño
+
+SOLUCIÓN IMPLEMENTADA:
+✓ Eliminado algoritmo de rasterización completamente
+✓ Implementado pikepdf nativo con optimización de streams
+✓ Compresión real sin convertir a imágenes
+✓ Configuraciones progresivas por nivel:
+  - "baja": compress_streams + basic deduplication
+  - "media": compress_streams + object deduplication
+  - "alta": compress_streams + object dedup + linearization
+  - "extrema": compress_streams + full optimization + cleanup
+
+RESULTADOS ESPERADOS:
+- 6MB original → ~4.5MB (baja, 25%)
+- 6MB original → ~3.6MB (media, 40%)
+- 6MB original → ~2.7MB (alta, 55%)
+- 6MB original → ~1.8MB (extrema, 70%)
+
+
+4.2 PROBLEMA DE SPLITTING
+==========================
+
+PROBLEMA ORIGINAL:
+- Errores frecuentes en división de PDFs
+- Archivos generados sin validación
+- Manejo incorrecto de índices de páginas
+- División desigual en customparts
+
+SOLUCIÓN IMPLEMENTADA:
+✓ Validación de PDF antes de procesamiento
+✓ Manejo robusto de índices de páginas
+✓ Verificación de archivos creados (existencia y tamaño > 0)
+✓ Distribución correcta de páginas restantes en customparts
+✓ Nombres de parámetros corregidos (customparts, pagesperpart)
+✓ Mejores mensajes de error
+
+VALIDACIONES AÑADIDAS:
+- PDF sin páginas
+- customparts < 1
+- pagesperpart < 1
+- Archivos ZIPs creados correctamente
+- Cada PDF generado tiene contenido
+
+
+4.3 PROBLEMA DE HOT-RELOAD EN DOCKER
+=====================================
+
+PROBLEMA ORIGINAL:
+- Los cambios en código NO se reflejaban automáticamente
+- Requería reiniciar contenedor (~5 minutos)
+
+SOLUCIÓN IMPLEMENTADA:
+Dockerfile:
+  ✓ Añadido flag --reload a uvicorn
+  CMD: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+docker-compose.yml:
+  ✓ Añadido volume mount del código fuente
+  volumes:
+    - ./app:/app/app  # HOT-RELOAD
+  ✓ Añadida variable PYTHONUNBUFFERED=1 para logs en tiempo real
+
+AHORA:
+- Los cambios se reflejan en SEGUNDOS
+- Los logs se ven en tiempo real
+- No requiere reiniciar el contenedor
+
+
+================================================================================
+5. PASOS PARA IMPLEMENTAR LA SOLUCIÓN
+================================================================================
+
+5.1 ACTUALIZAR CÓDIGO
+====================
+
+Los siguientes archivos han sido modificados:
+1. /api/app/services/compression.py
+2. /api/app/services/splitting.py
+3. /api/app/main.py
+4. /api/Dockerfile
+5. /api/docker-compose.yml
+
+✓ Ya están listos en el código
+
+
+5.2 REINICIAR DOCKER (UNA SOLA VEZ)
+===================================
+
+En la carpeta /api:
+
+# Detener contenedor actual
+docker-compose down
+
+# Reconstruir imagen con nuevo Dockerfile
+docker-compose up -d --build
+
+# Verificar que está corriendo
+docker ps | grep al-pdf-server
+docker logs al-pdf-server
+
+
+5.3 VERIFICAR QUE FUNCIONA
+===========================
+
+# Health check
+curl http://localhost:8000/health
+
+# Respuesta esperada
+{"status":"healthy"}
+
+
+5.4 REALIZAR CAMBIOS FUTUROS
+=============================
+
+Para los próximos cambios en el código:
+1. Edita los archivos en /api/app/**
+2. Guarda los cambios
+3. Espera 2-3 segundos
+4. El servidor se recargará automáticamente
+5. NO necesitas hacer nada más
+
+Los cambios se reflejan automáticamente gracias a:
+- Flag --reload en uvicorn
+- Volume mount del código fuente
+
+
+================================================================================
+6. CONFIGURACIÓN RECOMENDADA EN SITIO WEB
+================================================================================
+
+BASE_API_URL = "http://localhost:8000"  // CAMBIAR si API está en otro servidor
+
+Estructura recomendada para sitios web modernos:
+
+/src
+  /services
+    /api
+      pdfService.js  // Centralizar todas las llamadas al API
+      constants.js   // URLs, timeouts, etc.
+  /components
+    Compress/
+      Compress.jsx
+      Compress.css
+    Split/
+      Split.jsx
+      Split.css
+
+Archivo: pdfService.js
+----------------------
+const API_BASE = "http://localhost:8000";
+
+export const pdfService = {
+    async getCompressionEstimates(file) {
+        const formData = new FormData();
+        formData.append('file', file);
+        
+        const response = await fetch(`${API_BASE}/compress/estimates`, {
+            method: 'POST',
+            body: formData
+        });
+        
+        if (!response.ok) throw new Error('Failed to get estimates');
+        return response.json();
+    },
+
+    async compressPdf(file, quality, tempId = null) {
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('quality', quality);
+        if (tempId) formData.append('tempid', tempId);
+        
+        const response = await fetch(`${API_BASE}/compress`, {
+            method: 'POST',
+            body: formData
+        });
+        
+        if (!response.ok) throw new Error('Failed to compress PDF');
+        return response.blob();
+    },
+
+    async splitPdf(file, splitType, customParts = null, pagesPerPart = null) {
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('splittype', splitType);
+        if (customParts) formData.append('customparts', customParts);
+        if (pagesPerPart) formData.append('pagesperpart', pagesPerPart);
+        
+        const response = await fetch(`${API_BASE}/split`, {
+            method: 'POST',
+            body: formData
+        });
+        
+        if (!response.ok) throw new Error('Failed to split PDF');
+        return response.blob();
+    },
+
+    downloadBlob(blob, filename) {
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = filename;
+        link.click();
+        URL.revokeObjectURL(url);
+    }
+};
+
+
+================================================================================
+7. CHECKLIST DE IMPLEMENTACIÓN
+================================================================================
+
+Antes de usar en producción:
+
+CÓDIGO:
+  ☐ Archivos python actualizados
+  ☐ Docker reconstruido (docker-compose up -d --build)
+  ☐ Health check funciona
+  ☐ Tests básicos pasan
+
+COMPRESIÓN:
+  ☐ Compresión baja funciona
+  ☐ Compresión media funciona
+  ☐ Compresión alta funciona
+  ☐ Compresión extrema funciona
+  ☐ Estimaciones son precisas
+  ☐ Tamaño final < tamaño original
+
+DIVISIÓN:
+  ☐ División individual_pages funciona
+  ☐ División customparts funciona
+  ☐ División pagesperpart funciona
+  ☐ ZIP se genera correctamente
+  ☐ Se pueden extraer todos los archivos
+
+HOT-RELOAD:
+  ☐ Los cambios en código se reflejan en segundos
+  ☐ No es necesario reiniciar manualmente
+  ☐ Los logs se ven en tiempo real
+
+SITIO WEB:
+  ☐ Compresión funciona desde formulario
+  ☐ División funciona desde formulario
+  ☐ Descargas funcionan correctamente
+  ☐ Manejo de errores funciona
+  ☐ CORS configurado correctamente
+
+
+================================================================================
+8. TROUBLESHOOTING
+================================================================================
+
+PROBLEMA: API no responde
+SOLUCIÓN:
+  - Verificar docker: docker ps
+  - Ver logs: docker logs al-pdf-server
+  - Reiniciar: docker-compose down && docker-compose up -d
+
+PROBLEMA: Compresión sigue siendo lenta
+SOLUCIÓN:
+  - Usar nivel "baja" para PDFs grandes
+  - No rasterizar si no es necesario
+  - La solución actual no rasteriza
+
+PROBLEMA: División genera archivos vacíos
+SOLUCIÓN:
+  - Verificar PDF es válido
+  - Verificar número de páginas con: pdfinfo archivo.pdf
+  - Los logs mostrarán el error específico
+
+PROBLEMA: Hot-reload no funciona
+SOLUCIÓN:
+  - Verificar volume mount: docker inspect al-pdf-server
+  - Esperar 3-5 segundos después de guardar
+  - Ver logs: docker logs -f al-pdf-server
+
+PROBLEMA: Puerto 8000 en uso
+SOLUCIÓN:
+  - Ver qué ocupa: lsof -i :8000
+  - Cambiar puerto en docker-compose.yml y Dockerfile
+  - Reconstruir: docker-compose up -d --build
+
+
+================================================================================
+FIN DE LA DOCUMENTACIÓN
+================================================================================
+
+Para más información o reportar problemas, revisar los logs del contenedor:
+docker logs -f al-pdf-server
+

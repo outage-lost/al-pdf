@@ -5,6 +5,7 @@ from typing import List, Optional
 
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.responses import FileResponse
+from starlette.background import BackgroundTask
 from fastapi.middleware.cors import CORSMiddleware
 import aiofiles
 
@@ -103,23 +104,28 @@ async def compresspdfendpoint(
         compresspdf(inputpath, outputpath, quality)
 
         if not os.path.exists(outputpath):
+            # Attempted to create output but file missing
+            # Clean up and raise error
+            cleanuptempfiles([inputpath, outputpath])
             raise HTTPException(
                 status_code=500,
                 detail="El archivo comprimido no se generó correctamente",
             )
 
+        # Use BackgroundTask to remove temp files AFTER the response is sent
         return FileResponse(
             outputpath,
             filename=outputfilename,
             media_type="application/pdf",
+            background=BackgroundTask(lambda: cleanuptempfiles([inputpath, outputpath])),
         )
     except Exception as e:
+        # Ensure temporary files are removed on error
+        cleanuptempfiles([inputpath, outputpath])
         raise HTTPException(
             status_code=500,
             detail=f"Error al comprimir PDF: {str(e)}",
         )
-    finally:
-        cleanuptempfiles([inputpath, outputpath])
 
 
 # ---------------------------------------------------------
@@ -163,18 +169,20 @@ async def mergepdfsendpoint(files: List[UploadFile] = File(...)):
                 detail="El archivo unido no se generó correctamente",
             )
 
+        # Clean up temporaries after response is served
         return FileResponse(
             outputpath,
             filename=outputfilename,
             media_type="application/pdf",
+            background=BackgroundTask(lambda: cleanuptempfiles(temppaths + [outputpath])),
         )
     except Exception as e:
+        # Ensure temporaries removed on error
+        cleanuptempfiles(temppaths)
         raise HTTPException(
             status_code=500,
             detail=f"Error al unir PDFs: {str(e)}",
         )
-    finally:
-        cleanuptempfiles(temppaths)
 
 
 # ---------------------------------------------------------
@@ -191,11 +199,11 @@ async def splitpdfendpoint(
     if not file.filename or not file.filename.lower().endswith(".pdf"):
         raise HTTPException(status_code=400, detail="Solo se permiten archivos PDF")
 
-    if splittype == "customparts" and (not customparts or customparts < 2):
+    if splittype == "customparts" and (not customparts or customparts < 1):
         raise HTTPException(
             status_code=400,
             detail=(
-                "customparts es requerido y debe ser al menos 2 "
+                "customparts es requerido y debe ser al menos 1 "
                 "para este tipo de división"
             ),
         )
@@ -241,18 +249,20 @@ async def splitpdfendpoint(
                 detail="El archivo ZIP no se generó correctamente",
             )
 
+        # Remove temp files after response has been served
         return FileResponse(
             zippath,
             filename=zipfilename,
             media_type="application/zip",
+            background=BackgroundTask(lambda: cleanuptempfiles([inputpath] + outputfiles + [zippath])),
         )
     except Exception as e:
+        # Ensure temporaries removed on error
+        cleanuptempfiles([inputpath] + outputfiles)
         raise HTTPException(
             status_code=500,
             detail=f"Error al dividir PDF: {str(e)}",
         )
-    finally:
-        cleanuptempfiles([inputpath] + outputfiles)
 
 
 # ---------------------------------------------------------
@@ -332,10 +342,12 @@ async def converttopdfendpoint(files: List[UploadFile] = File(...)):
 
         # Si es solo un archivo, devolver directamente el PDF
         if len(outputpaths) == 1:
+            # Serve single PDF and clean up after response
             return FileResponse(
                 outputpaths[0],
                 filename=os.path.basename(outputpaths[0]),
                 media_type="application/pdf",
+                background=BackgroundTask(lambda: cleanuptempfiles(inputpaths + outputpaths)),
             )
 
         # Si son varios, comprimir en ZIP
@@ -352,21 +364,25 @@ async def converttopdfendpoint(files: List[UploadFile] = File(...)):
                 detail="El archivo ZIP no se generó correctamente",
             )
 
+        # Serve zip and clean up after response
         return FileResponse(
             zippath,
             filename=zipfilename,
             media_type="application/zip",
+            background=BackgroundTask(lambda: cleanuptempfiles(inputpaths + outputpaths + [zippath])),
         )
 
     except HTTPException:
+        # Ensure temporaries removed if HTTPException was raised earlier
+        cleanuptempfiles(inputpaths + outputpaths)
         raise
     except Exception as e:
+        # Ensure temporaries removed on unexpected error
+        cleanuptempfiles(inputpaths + outputpaths)
         raise HTTPException(
             status_code=500,
             detail=f"Error al convertir archivos: {str(e)}",
         )
-    finally:
-        cleanuptempfiles(inputpaths + outputpaths)
 
 
 if __name__ == "__main__":

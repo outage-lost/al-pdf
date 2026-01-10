@@ -23,3 +23,10 @@ def cleanup_temp_files(file_paths: List[str]):
                 os.remove(file_path)
         except Exception:
             pass  # Ignorar errores al eliminar archivos temporales
+
+# Aliases para compatibilidad con nombres usados en `main.py`
+def generaterandomfilename(extension: str) -> str:
+    return generate_random_filename(extension)
+
+def cleanuptempfiles(file_paths: List[str]):
+    return cleanup_temp_files(file_paths)
