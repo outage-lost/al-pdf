@@ -1,30 +1,61 @@
-# Etapa 1: Build de la app React
-FROM node:18-alpine AS build
+# Etapa 1: Instalación de dependencias
+FROM node:20-alpine AS deps
+
+# Instalar pnpm
+RUN corepack enable && corepack prepare pnpm@latest --activate
 
 WORKDIR /app
 
-# Copiar package.json y package-lock.json
-COPY package*.json ./
+# Copiar archivos de dependencias
+COPY package.json pnpm-lock.yaml ./
 
 # Instalar dependencias
-RUN npm install
+RUN pnpm install --frozen-lockfile
 
-# Copiar el código fuente
+# Etapa 2: Build de la aplicación
+FROM node:20-alpine AS builder
+
+# Instalar pnpm
+RUN corepack enable && corepack prepare pnpm@latest --activate
+
+WORKDIR /app
+
+# Copiar dependencias desde la etapa anterior
+COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
-# Construir la aplicación para producción
-RUN npm run build
+# Variables de entorno para el build
+ENV NEXT_TELEMETRY_DISABLED=1
+ENV NODE_ENV=production
 
-# Etapa 2: Servir estáticos con nginx
-FROM nginx:alpine
+# Construir la aplicación
+RUN pnpm build
 
-# Copiar el build al directorio por defecto de nginx
-COPY --from=build /app/build /usr/share/nginx/html
+# Etapa 3: Imagen de producción
+FROM node:20-alpine AS runner
 
-# Configuración básica de nginx (single-page app)
-COPY nginx.conf /etc/nginx/conf.d/default.conf
+WORKDIR /app
 
-# Exponer puerto HTTP del contenedor
-EXPOSE 80
+ENV NODE_ENV=production
+ENV NEXT_TELEMETRY_DISABLED=1
 
-CMD ["nginx", "-g", "daemon off;"]
+# Crear usuario no-root para mayor seguridad
+RUN addgroup --system --gid 1001 nodejs
+RUN adduser --system --uid 1001 nextjs
+
+# Copiar archivos necesarios desde el builder
+COPY --from=builder /app/public ./public
+COPY --from=builder /app/.next/standalone ./
+COPY --from=builder /app/.next/static ./.next/static
+
+# Cambiar permisos
+RUN chown -R nextjs:nodejs /app
+
+USER nextjs
+
+EXPOSE 3000
+
+ENV PORT=3000
+ENV HOSTNAME="0.0.0.0"
+
+CMD ["node", "server.js"]
