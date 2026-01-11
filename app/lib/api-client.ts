@@ -15,11 +15,6 @@ export class ApiError extends Error {
 
 export async function apiRequest<T>(endpoint: string, options?: RequestInit): Promise<T> {
   const config = getApiConfig()
-
-  if (!config.isConfigured) {
-    throw new ApiError("URL de la API no configurada. Por favor configúrala en Ajustes.")
-  }
-
   const url = `${config.baseUrl}${endpoint}`
 
   try {

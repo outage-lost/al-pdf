@@ -58,11 +58,6 @@ export default function CompressPage() {
   const handleGetEstimates = async () => {
     const config = getApiConfig()
 
-    if (!config.isConfigured) {
-      setError("API no configurada. Por favor configúrala en Ajustes.")
-      return
-    }
-
     if (!canGetEstimates) {
       setError("Por favor sube exactamente 1 archivo PDF.")
       return

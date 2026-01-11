@@ -36,11 +36,6 @@ export default function SplitPage() {
   const handleSplit = async () => {
     const config = getApiConfig()
 
-    if (!config.isConfigured) {
-      setError("API no configurada. Por favor configúrala en Ajustes.")
-      return
-    }
-
     if (!canProcess) {
       setError("Por favor sube exactamente 1 archivo PDF para dividir.")
       return

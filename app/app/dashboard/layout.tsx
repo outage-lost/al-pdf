@@ -5,11 +5,9 @@ import type React from "react"
 import { useState, useEffect } from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { FileText, Combine, Split, Minimize2, FileUp, Settings, Menu, X } from "lucide-react"
+import { FileText, Combine, Split, Minimize2, FileUp, Menu, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { ThemeToggle } from "@/components/theme-toggle"
-import { ConfigPanel } from "@/components/config-panel"
-import { getApiConfig } from "@/lib/api-config"
 import { cn } from "@/lib/utils"
 
 const navigation = [
@@ -21,23 +19,7 @@ const navigation = [
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
-  const [isConfigOpen, setIsConfigOpen] = useState(false)
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
-  const [isConfigured, setIsConfigured] = useState(false)
-
-  useEffect(() => {
-    checkConfig()
-  }, [])
-
-  const checkConfig = () => {
-    const config = getApiConfig()
-    setIsConfigured(config.isConfigured)
-  }
-
-  const handleConfigChange = () => {
-    checkConfig()
-    setIsConfigOpen(false)
-  }
 
   return (
     <div className="min-h-screen bg-background">
@@ -50,14 +32,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           </Link>
           <div className="flex items-center gap-2">
             <ThemeToggle />
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => setIsConfigOpen(true)}
-              className={!isConfigured ? "text-yellow-600 dark:text-yellow-400" : ""}
-            >
-              <Settings className="h-5 w-5" />
-            </Button>
             <Button variant="ghost" size="icon" onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}>
               {isMobileMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
             </Button>
@@ -121,22 +95,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             })}
           </nav>
 
-          <div className="border-t p-4 space-y-2">
-            <div className="flex items-center gap-2">
-              <ThemeToggle />
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => setIsConfigOpen(true)}
-                className={cn("flex-1", !isConfigured && "text-yellow-600 dark:text-yellow-400")}
-              >
-                <Settings className="h-5 w-5" />
-                <span className="ml-2 text-sm font-medium">Ajustes</span>
-              </Button>
-            </div>
-            {!isConfigured && (
-              <p className="text-xs text-yellow-600 dark:text-yellow-400 px-2">Configura la API para empezar a usar las herramientas</p>
-            )}
+          <div className="border-t p-4">
+            <ThemeToggle />
           </div>
         </div>
       </aside>
@@ -146,7 +106,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         <div className="min-h-screen">{children}</div>
       </main>
 
-      <ConfigPanel isOpen={isConfigOpen} onClose={() => setIsConfigOpen(false)} onConfigChange={handleConfigChange} />
+
     </div>
   )
 }

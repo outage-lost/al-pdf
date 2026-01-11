@@ -1,37 +1,26 @@
 "use client"
 
+// Hardcoded API URL
+const API_BASE_URL = "http://b06labs-apps.tail0df002.ts.net:8999"
+
 export interface ApiConfig {
   baseUrl: string
   isConfigured: boolean
   isConnected: boolean
 }
 
-const STORAGE_KEY = "alpdf_api_url"
-
 export function getApiConfig(): ApiConfig {
-  if (typeof window === "undefined") {
-    return { baseUrl: "", isConfigured: false, isConnected: false }
-  }
-
-  const storedUrl = localStorage.getItem(STORAGE_KEY)
   return {
-    baseUrl: storedUrl || "",
-    isConfigured: !!storedUrl,
-    isConnected: false, // Will be checked dynamically
+    baseUrl: API_BASE_URL,
+    isConfigured: true,
+    isConnected: true,
   }
 }
 
-export function setApiUrl(url: string): void {
-  localStorage.setItem(STORAGE_KEY, url)
-}
-
-export function clearApiUrl(): void {
-  localStorage.removeItem(STORAGE_KEY)
-}
-
-export async function checkApiHealth(baseUrl: string): Promise<boolean> {
+export async function checkApiHealth(baseUrl?: string): Promise<boolean> {
+  const url = baseUrl || API_BASE_URL
   try {
-    const response = await fetch(`${baseUrl}/health`, {
+    const response = await fetch(`${url}/health`, {
       method: "GET",
       headers: {
         "Content-Type": "application/json",
@@ -39,7 +28,7 @@ export async function checkApiHealth(baseUrl: string): Promise<boolean> {
     })
     return response.ok
   } catch (error) {
-    console.error("[v0] Health check failed:", error)
+    console.error("[ALPDF] Health check failed:", error)
     return false
   }
 }

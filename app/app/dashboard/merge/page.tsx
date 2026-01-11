@@ -29,11 +29,6 @@ export default function MergePage() {
   const handleMerge = async () => {
     const config = getApiConfig()
 
-    if (!config.isConfigured) {
-      setError("API no configurada. Por favor configúrala en Ajustes.")
-      return
-    }
-
     if (!canProcess) {
       setError("Por favor sube al menos 2 archivos PDF para unir.")
       return
