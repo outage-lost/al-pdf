@@ -12,22 +12,46 @@ import math
 # ============================================================
 
 class CompressionError(Exception):
-    """Excepción unificada para errores de compresión controlados"""
+    """
+    Se lanza cuando ocurre un error técnico (librerías faltantes, corrupción).
+    """
     pass
 
-# Mapeo de configuraciones según el modo solicitado
-# DPI: Resolución de imágenes
-# JPEG_QUALITY: Calidad de compresión visual
-# GS_SETTING: Configuración de Ghostscript (si está disponible)
+class OptimizationFailure(Exception):
+    """
+    Se lanza cuando el archivo NO se pudo reducir (ya estaba optimizado)
+    o el resultado es mayor que el original.
+    La API debe capturar esto y devolver un 422 o 400 con mensaje:
+    "El archivo ya está optimizado y no se puede comprimir más."
+    """
+    pass
+
+# CONFIGURACIONES AJUSTADAS
 COMPRESSION_SETTINGS = {
-    "baja":    {"dpi": 150, "jpeg_quality": 85, "gs_setting": "/prepress"}, # Alta calidad, poca compresión
-    "media":   {"dpi": 120, "jpeg_quality": 75, "gs_setting": "/ebook"},    # Balanceado (Recomendado)
-    "alta":    {"dpi": 96,  "jpeg_quality": 60, "gs_setting": "/screen"},   # Archivos web
-    "extrema": {"dpi": 72,  "jpeg_quality": 50, "gs_setting": "/screen"}    # Máxima compresión posible
+    "baja": {
+        "dpi": 150, 
+        "jpeg_quality": 85, 
+        "gs_setting": "/prepress"
+    },
+    "media": {
+        "dpi": 110, 
+        "jpeg_quality": 70, 
+        "gs_setting": "/ebook"
+    },
+    "alta": {
+        "dpi": 96,  
+        "jpeg_quality": 55, 
+        "gs_setting": "/screen"
+    },
+    "extrema": {
+        # MODO AGRESIVO REAL
+        "dpi": 72,         # Límite legible en pantalla
+        "jpeg_quality": 35, # Calidad visual baja, alto ahorro
+        "gs_setting": "/screen" # Base de GS
+    }
 }
 
 def human_size(size_bytes):
-    """Formatea bytes a leíble por humanos"""
     if size_bytes == 0: return "0B"
     size_name = ("B", "KB", "MB", "GB")
     i = int(math.floor(math.log(size_bytes, 1024)))
@@ -40,10 +64,7 @@ def human_size(size_bytes):
 # ============================================================
 
 def engine_pikepdf_lossless(input_path, output_path):
-    """
-    MOTOR 1: Limpieza de metadatos y estructura (Sin pérdida).
-    Rápido y seguro. Elimina basura del PDF.
-    """
+    """MOTOR 1: Limpieza de metadatos (Sin pérdida)."""
     try:
         with pikepdf.open(input_path) as pdf:
             pdf.remove_unreferenced_resources()
@@ -55,34 +76,41 @@ def engine_pikepdf_lossless(input_path, output_path):
 
 def engine_ghostscript(input_path, output_path, mode="media"):
     """
-    MOTOR 2: Ghostscript (Estándar industrial).
-    Requiere tener 'gs' instalado en el servidor (sudo apt install ghostscript).
+    MOTOR 2: Ghostscript.
+    Se ha aumentado el TIMEOUT y ajustado parámetros para modo extremo.
     """
     setting = COMPRESSION_SETTINGS[mode]["gs_setting"]
+    dpi = COMPRESSION_SETTINGS[mode]["dpi"]
     
-    # Comandos para Ghostscript
+    # Flags base
     gs_command = [
         "gs",
         "-sDEVICE=pdfwrite",
         "-dCompatibilityLevel=1.4",
         f"-dPDFSETTINGS={setting}",
-        "-dNOPAUSE", 
-        "-dQUIET", 
-        "-dBATCH",
+        "-dNOPAUSE", "-dQUIET", "-dBATCH",
         "-dDetectDuplicateImages=true",
         "-dDownsampleColorImages=true",
-        f"-dColorImageResolution={COMPRESSION_SETTINGS[mode]['dpi']}",
+        f"-dColorImageResolution={dpi}",
+        "-dDownsampleGrayImages=true",     # Agregado: Comprimir imágenes en escala de grises también
+        f"-dGrayImageResolution={dpi}",
+        "-dDownsampleMonoImages=true",
+        f"-dMonoImageResolution={dpi}",
         "-sOutputFile=" + output_path,
         input_path
     ]
 
+    # Timeout aumentado a 300 segundos (5 minutos) para archivos grandes
     try:
-        result = subprocess.run(gs_command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=60)
+        result = subprocess.run(gs_command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=300)
         if result.returncode == 0 and os.path.exists(output_path):
             return True
+        print(f"[Engine Ghostscript] Falló con código {result.returncode}")
+        return False
+    except subprocess.TimeoutExpired:
+        print("[Engine Ghostscript] ⏳ Timeout (se excedió el tiempo límite de 300s)")
         return False
     except FileNotFoundError:
-        # Ghostscript no instalado
         return False
     except Exception as e:
         print(f"[Engine Ghostscript] Error: {e}")
@@ -90,9 +118,8 @@ def engine_ghostscript(input_path, output_path, mode="media"):
 
 def engine_pymupdf_images(input_path, output_path, mode="media"):
     """
-    MOTOR 3: PyMuPDF Avanzado (Python puro).
-    Recorre el PDF, busca imágenes, las reduce de tamaño y las reemplaza.
-    NO toca el texto (mantiene la calidad vectorial).
+    MOTOR 3: PyMuPDF Avanzado.
+    Re-comprime imágenes una por una.
     """
     try:
         doc = fitz.open(input_path)
@@ -100,59 +127,55 @@ def engine_pymupdf_images(input_path, output_path, mode="media"):
         target_dpi = settings["dpi"]
         quality = settings["jpeg_quality"]
         
-        # Optimización: Solo procesar si el archivo es grande o tiene muchas imágenes
         processed_something = False
 
         for page_num in range(len(doc)):
             page = doc[page_num]
             images = page.get_images(full=True)
 
-            # Si hay muchas imágenes en una página, iteramos
             for img_info in images:
                 xref = img_info[0]
-                
-                # Obtener imagen original
                 base_image = doc.extract_image(xref)
                 if not base_image: continue
                 
                 image_bytes = base_image["image"]
                 
-                # Abrir con PIL para verificar tamaño
                 try:
                     img = Image.open(io.BytesIO(image_bytes))
-                    w, h = img.size
                     
-                    # Calcular DPI actual aproximado (asumiendo tamaño estándar)
-                    # Si la imagen es muy pequeña, no vale la pena comprimirla
-                    if w < 500 and h < 500:
-                        continue
-
-                    # Redimensionar si es necesario
-                    # La lógica es: si reducirla ahorra espacio, hazlo.
-                    
-                    img_format = "JPEG"
-                    if img.mode in ("P", "RGBA"):
+                    # Si es modo EXTREMA, convertir a RGB siempre para quitar canales extra innecesarios (CMYK)
+                    if mode == "extrema" and img.mode == "CMYK":
                         img = img.convert("RGB")
                     
+                    # Verificar dimensiones para no procesar íconos pequeños
+                    w, h = img.size
+                    if w < 100 or h < 100: continue
+
+                    # Guardar buffer comprimido
                     buffer = io.BytesIO()
-                    img.save(buffer, format=img_format, quality=quality, optimize=True)
+                    img_format = "JPEG"
+                    
+                    # En modo extremo forzamos JPEG incluso si era PNG para ahorrar,
+                    # a menos que tenga transparencia
+                    if img.mode == "RGBA" or img.mode == "P":
+                         # Mantener PNG si hay transparencia pero optimizando
+                        img.save(buffer, format="PNG", optimize=True)
+                    else:
+                        img = img.convert("RGB")
+                        img.save(buffer, format="JPEG", quality=quality, optimize=True)
+                    
                     new_bytes = buffer.getvalue()
                     
-                    # Solo reemplazar si el nuevo tamaño es menor
+                    # Solo reemplazar si mejora
                     if len(new_bytes) < len(image_bytes):
                         doc.update_stream(xref, new_bytes)
                         processed_something = True
                         
-                except Exception as e:
-                    # Si falla una imagen, saltarla y seguir
+                except Exception:
                     continue
 
-        if processed_something:
-            doc.save(output_path, garbage=4, deflate=True)
-        else:
-            # Si no hicimos nada, guardamos con limpieza básica
-            doc.save(output_path, garbage=3, deflate=True)
-            
+        # Garbage=4 es la limpieza más agresiva de PyMuPDF
+        doc.save(output_path, garbage=4, deflate=True)
         doc.close()
         return True
     except Exception as e:
@@ -160,91 +183,94 @@ def engine_pymupdf_images(input_path, output_path, mode="media"):
         return False
 
 # ============================================================
-# LÓGICA PRINCIPAL DE NEGOCIO
+# LÓGICA PRINCIPAL
 # ============================================================
 
 def compress_pdf(input_path: str, output_path: str, mode: str = "media"):
     """
-    Función principal lista para producción.
-    Estrategia en cascada: intenta el mejor método, si falla o no comprime, baja al siguiente.
+    Proceso principal. 
+    NO devuelve el archivo original si falla la reducción.
+    Lanza OptimizationFailure si no se logró reducir.
     """
-    # 1. Validación básica de entrada
+    
+    # 1. Validación inicial
     if not os.path.exists(input_path):
-        raise ValueError("El archivo de entrada no existe.")
+        raise CompressionError("El archivo de entrada no existe.")
     
     if mode not in COMPRESSION_SETTINGS:
-        mode = "media" # Fallback a media
+        mode = "media"
 
     original_size = os.path.getsize(input_path)
     temp_output = output_path + ".tmp"
     
     print(f"🚀 Iniciando compresión: {os.path.basename(input_path)} ({human_size(original_size)}) | Modo: {mode}")
 
-    # --- ESTRATEGIA 1: Ghostscript (Mejor balance Calidad/Peso) ---
-    success = engine_ghostscript(input_path, temp_output, mode)
-    
-    # Verificación Estrategia 1
-    if success and os.path.exists(temp_output):
-        new_size = os.path.getsize(temp_output)
-        # Si GS funcionó y redujo el tamaño, usamos ese
-        if new_size < original_size:
-            shutil.move(temp_output, output_path)
-            print(f"✅ Éxito con Ghostscript. Reducción: {100 - (new_size/original_size*100):.1f}%")
-            return True
-        else:
-            print("⚠️ Ghostscript no logró reducir el tamaño.")
-            os.remove(temp_output) # Limpiar
-    
-    # --- ESTRATEGIA 2: PyMuPDF (Optimización de imágenes interna) ---
-    # Si GS falló o no redujo, intentamos procesar imágenes una por una con Python
-    print("🔄 Intentando motor PyMuPDF (Python nativo)...")
-    success = engine_pymupdf_images(input_path, temp_output, mode)
+    final_success = False
 
-    if success and os.path.exists(temp_output):
+    # --- ESTRATEGIA 1: Ghostscript (Preferido) ---
+    # Intenta GS primero. Si falla (timeout o error) pasa al siguiente.
+    if engine_ghostscript(input_path, temp_output, mode):
         new_size = os.path.getsize(temp_output)
+        
+        # Validación de "No Aumento"
         if new_size < original_size:
+            reduction = (1 - new_size/original_size) * 100
+            print(f"✅ Éxito con Ghostscript. Reducción: {reduction:.1f}%")
             shutil.move(temp_output, output_path)
-            print(f"✅ Éxito con PyMuPDF. Reducción: {100 - (new_size/original_size*100):.1f}%")
             return True
         else:
-            print("⚠️ PyMuPDF tampoco logró reducir el tamaño significativamente.")
+            print(f"⚠️ Ghostscript generó un archivo más grande (+{human_size(new_size - original_size)}). Descartando.")
             os.remove(temp_output)
-
-    # --- ESTRATEGIA 3: PikePDF (Último recurso, limpieza sin pérdida) ---
-    # Si todo lo anterior falló o aumentó el tamaño, intentamos solo limpiar metadatos
-    print("🧹 Intentando limpieza sin pérdida (PikePDF)...")
-    success = engine_pikepdf_lossless(input_path, temp_output)
     
-    if success and os.path.exists(temp_output):
+    # --- ESTRATEGIA 2: PyMuPDF (Fallback Robusto) ---
+    print("🔄 Intentando motor PyMuPDF (Python nativo)...")
+    if engine_pymupdf_images(input_path, temp_output, mode):
         new_size = os.path.getsize(temp_output)
+        
         if new_size < original_size:
+            reduction = (1 - new_size/original_size) * 100
+            print(f"✅ Éxito con PyMuPDF. Reducción: {reduction:.1f}%")
             shutil.move(temp_output, output_path)
-            print("✅ Limpieza completada.")
             return True
-        os.remove(temp_output)
+        else:
+            print("⚠️ PyMuPDF tampoco logró reducir el tamaño.")
+            if os.path.exists(temp_output):
+                os.remove(temp_output)
 
-    # --- FALLBACK FINAL: Devolver original ---
-    # Si NADA funcionó para reducir el tamaño, copiamos el original.
-    # Esto evita el error de "archivo corrupto" o "no procesado".
-    print("⚠️ No se pudo comprimir más el archivo. Devolviendo original.")
-    shutil.copy2(input_path, output_path)
-    return True
+    # --- ESTRATEGIA 3: Limpieza Metadata (Último intento) ---
+    # Solo si los anteriores fallaron, intentamos quitar basura sin tocar imágenes
+    print("🧹 Intentando limpieza de metadatos...")
+    if engine_pikepdf_lossless(input_path, temp_output):
+        new_size = os.path.getsize(temp_output)
+        # Aquí somos estrictos: debe haber bajado al menos un 1% para valer la pena
+        if new_size < original_size * 0.99:
+            shutil.move(temp_output, output_path)
+            print("✅ Limpieza completada (pequeña reducción).")
+            return True
+        else:
+            if os.path.exists(temp_output):
+                os.remove(temp_output)
+
+    # --- FALLO TOTAL ---
+    # Si llegamos aquí, ningún método logró reducir el archivo.
+    # NO devolvemos el original. Lanzamos excepción para que la API notifique.
+    print("❌ No se pudo optimizar el archivo (ya estaba comprimido o protegido).")
+    raise OptimizationFailure(
+        f"No se pudo reducir el tamaño del archivo. Es posible que ya esté optimizado al máximo para el nivel '{mode}'."
+    )
 
 def get_compression_estimates(input_path: str) -> dict:
-    """
-    Genera estimaciones basadas en estadística, no en procesamiento real (para velocidad).
-    """
     if not os.path.exists(input_path):
         return {}
-        
+    
     size = os.path.getsize(input_path)
     
-    # Factores conservadores para no prometer de más
+    # Estimaciones ajustadas a la nueva realidad agresiva
     factors = {
-        "baja": 0.90,    # ~10% reducción
-        "media": 0.75,   # ~25% reducción
-        "alta": 0.50,    # ~50% reducción
-        "extrema": 0.35  # ~65% reducción
+        "baja": 0.90, 
+        "media": 0.70, 
+        "alta": 0.45, 
+        "extrema": 0.25  # Prometemos una reducción fuerte
     }
     
     estimates = {}
@@ -255,24 +281,11 @@ def get_compression_estimates(input_path: str) -> dict:
             "size_human": human_size(est_size),
             "reduction_percent": int((1 - factor) * 100)
         }
-    
     return estimates
 
-# ALIASES PARA COMPATIBILIDAD CON TU API EXISTENTE
+# ALIASES
 def getcompressionestimates(input_path: str) -> dict:
     return get_compression_estimates(input_path)
 
 def compresspdf(input_path: str, output_path: str, mode: str = "media"):
     return compress_pdf(input_path, output_path, mode)
-
-# Bloque de prueba simple si ejecutas el script directamente
-if __name__ == "__main__":
-    # Crea un archivo dummy para probar si no existe
-    test_file = "test_doc.pdf"
-    if not os.path.exists(test_file):
-        print(f"Crea un archivo {test_file} para probar.")
-    else:
-        try:
-            compress_pdf(test_file, "resultado_comprimido.pdf", "media")
-        except Exception as e:
-            print(f"Error fatal: {e}")
