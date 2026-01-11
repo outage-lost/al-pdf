@@ -1,0 +1,27 @@
+version: '3.8'
+
+services:
+  backend:
+    build: ./api
+    container_name: alpdf-backend
+    ports:
+      - "8999:8999"
+    volumes:
+      - ./api/temp:/app/temp
+    restart: always
+
+  frontend:
+    build: ./app
+    container_name: alpdf-frontend
+    ports:
+      - "9001:3000"
+    environment:
+      # IMPORTANTE: Aquí pones la URL de tu backend
+      - NEXT_PUBLIC_API_URL=http://192.168.122.49:8999
+    depends_on:
+      - backend
+    restart: always
+
+networks:
+  default:
+    name: alpdf-network
