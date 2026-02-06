@@ -32,7 +32,7 @@ services:
         NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://api:8999}
     container_name: alpdf-web
     ports:
-      - "3000:3000"
+      - "9001:3000"
     depends_on:
       api:
         condition: service_healthy

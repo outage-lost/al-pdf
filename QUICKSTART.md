@@ -17,7 +17,7 @@ docker-compose up --build
 # Verás: "alpdf-api" y "alpdf-web" en ejecución
 
 # 5. Acceder
-# Web: http://localhost:3000
+# Web: http://localhost:9001
 # API: http://localhost:8999
 # API Health: curl http://localhost:8999/health
 ```
@@ -97,7 +97,7 @@ curl http://localhost:8999/health
 # Respuesta: {"status":"healthy"}
 
 # 2. Visitar web
-open http://localhost:3000
+open http://localhost:9001
 
 # 3. Probar funciones
 # - Subir imagen → convertir a PDF

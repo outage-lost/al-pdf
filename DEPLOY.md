@@ -93,7 +93,7 @@ cp .env.example .env
 docker-compose up --build
 
 # Acceder a:
-# - Web: http://localhost:3000
+# - Web: http://localhost:9001
 # - API: http://localhost:8999
 ```
 
