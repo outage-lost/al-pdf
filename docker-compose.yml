@@ -1,27 +1,49 @@
 version: '3.8'
 
 services:
-  backend:
+  api:
     build: ./api
-    container_name: alpdf-backend
+    container_name: alpdf-api
     ports:
+      # Puerto interno del contenedor 8999, expuesto como 8999
       - "8999:8999"
     volumes:
       - ./api/temp:/app/temp
     restart: always
-
-  frontend:
-    build: ./app
-    container_name: alpdf-frontend
-    ports:
-      - "9001:3000"
+    networks:
+      - alpdf-network
     environment:
-      # IMPORTANTE: Aquí pones la URL de tu backend
-      - NEXT_PUBLIC_API_URL=http://192.168.122.49:8999
+      - TEMPDIR=/app/temp
+      - PYTHONDONTWRITEBYTECODE=1
+      - PYTHONUNBUFFERED=1
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8999/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  web:
+    build:
+      context: ./app
+      args:
+        # URL interna para Docker: http://api:8999
+        # Si quieres usar URL externa, reemplaza con tu dominio
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://api:8999}
+    container_name: alpdf-web
+    ports:
+      - "3000:3000"
     depends_on:
-      - backend
+      api:
+        condition: service_healthy
     restart: always
+    networks:
+      - alpdf-network
+    environment:
+      - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://api:8999}
+      - NODE_ENV=production
 
 networks:
-  default:
+  alpdf-network:
+    driver: bridge
     name: alpdf-network

@@ -1,11 +1,12 @@
 "use client"
 
 import { useState } from "react"
-import { FileUp, Download, AlertCircle, Info } from "lucide-react"
+import { FileUp, Download, AlertCircle, Info, Radio } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { FileUploadZone } from "@/components/file-upload-zone"
 import { getApiConfig } from "@/lib/api-config"
 import { ApiError } from "@/lib/api-client"
@@ -16,16 +17,20 @@ interface FileItem {
   preview?: string
 }
 
+type MergeMode = "zip" | "merge"
+
 export default function ConvertPage() {
   const [files, setFiles] = useState<FileItem[]>([])
+  const [mergeMode, setMergeMode] = useState<MergeMode>("zip")
   const [isProcessing, setIsProcessing] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [outputName, setOutputName] = useState("")
   const [showNameInput, setShowNameInput] = useState(false)
   const [processedBlob, setProcessedBlob] = useState<Blob | null>(null)
-  const [isZip, setIsZip] = useState(false)
+  const [resultType, setResultType] = useState<"pdf" | "zip">("zip")
 
   const canProcess = files.length >= 1
+  const hasMultipleFiles = files.length > 1
 
   const handleConvert = async () => {
     const config = getApiConfig()
@@ -44,7 +49,13 @@ export default function ConvertPage() {
         formData.append("files", fileItem.file)
       })
 
-      const response = await fetch(`${config.baseUrl}/convert`, {
+      // Usar el nuevo endpoint /convert-merge-zip si hay múltiples archivos
+      const endpoint = hasMultipleFiles ? "/convert-merge-zip" : "/convert"
+      if (hasMultipleFiles) {
+        formData.append("merge_mode", mergeMode)
+      }
+
+      const response = await fetch(`${config.baseUrl}${endpoint}`, {
         method: "POST",
         body: formData,
       })
@@ -60,13 +71,14 @@ export default function ConvertPage() {
         throw new ApiError(detail, response.status, detail)
       }
 
-      // Detect if response is PDF or ZIP based on Content-Type
+      // Detectar tipo de resultado basado en Content-Type
       const contentType = response.headers.get("Content-Type")
-      const isZipFile = contentType?.includes("zip") || files.length > 1
+      const isZipFile =
+        contentType?.includes("zip") || (hasMultipleFiles && mergeMode === "zip")
 
       const blob = await response.blob()
       setProcessedBlob(blob)
-      setIsZip(isZipFile)
+      setResultType(isZipFile ? "zip" : "pdf")
       setShowNameInput(true)
     } catch (err) {
       if (err instanceof ApiError) {
@@ -74,7 +86,7 @@ export default function ConvertPage() {
       } else {
         setError(`Error de red. Por favor verifica tu conexión. ${String(err)}`)
       }
-      console.error("[v0] Convert error:", err)
+      console.error("[Convert] Error:", err)
     } finally {
       setIsProcessing(false)
     }
@@ -84,7 +96,7 @@ export default function ConvertPage() {
     if (!processedBlob) return
 
     let filename: string
-    if (isZip) {
+    if (resultType === "zip") {
       filename = outputName.trim() || "converted-pdfs.zip"
       filename = filename.endsWith(".zip") ? filename : `${filename}.zip`
     } else {
@@ -106,7 +118,8 @@ export default function ConvertPage() {
     setProcessedBlob(null)
     setShowNameInput(false)
     setOutputName("")
-    setIsZip(false)
+    setMergeMode("zip")
+    setResultType("zip")
   }
 
   return (
@@ -118,7 +131,9 @@ export default function ConvertPage() {
           </div>
           <div>
             <h1 className="text-3xl font-bold">Convertir a PDF</h1>
-            <p className="text-muted-foreground">Convierte imágenes y documentos a formato PDF</p>
+            <p className="text-muted-foreground">
+              Convierte imágenes y documentos a formato PDF
+            </p>
           </div>
         </div>
       </div>
@@ -158,15 +173,47 @@ export default function ConvertPage() {
             </div>
           )}
 
-          {files.length > 1 && (
-            <div className="flex items-center gap-2 p-3 rounded-lg bg-yellow-500/10 text-yellow-600 dark:text-yellow-400">
-              <Info className="h-4 w-4 flex-shrink-0" />
-              <p className="text-sm">Los múltiples archivos se devolverán en un archivo ZIP</p>
-            </div>
+          {hasMultipleFiles && !showNameInput && (
+            <Card className="bg-muted/50">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base">Opciones de descarga</CardTitle>
+                <CardDescription>
+                  Elige cómo descargar los archivos convertidos
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <RadioGroup value={mergeMode} onValueChange={(value) => setMergeMode(value as MergeMode)}>
+                  <div className="flex items-center space-x-3 mb-4">
+                    <RadioGroupItem value="zip" id="mode-zip" />
+                    <Label htmlFor="mode-zip" className="cursor-pointer flex-1">
+                      <div className="font-medium">Descargar como ZIP</div>
+                      <div className="text-xs text-muted-foreground mt-1">
+                        Todos los PDFs comprimidos en un archivo ZIP
+                      </div>
+                    </Label>
+                  </div>
+
+                  <div className="flex items-center space-x-3">
+                    <RadioGroupItem value="merge" id="mode-merge" />
+                    <Label htmlFor="mode-merge" className="cursor-pointer flex-1">
+                      <div className="font-medium">Agrupar en un solo PDF</div>
+                      <div className="text-xs text-muted-foreground mt-1">
+                        Todos los archivos convertidos se unirán en un único PDF
+                      </div>
+                    </Label>
+                  </div>
+                </RadioGroup>
+              </CardContent>
+            </Card>
           )}
 
           {!showNameInput ? (
-            <Button onClick={handleConvert} disabled={!canProcess || isProcessing} size="lg" className="w-full">
+            <Button
+              onClick={handleConvert}
+              disabled={!canProcess || isProcessing}
+              size="lg"
+              className="w-full"
+            >
               {isProcessing ? (
                 <>
                   <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
@@ -183,7 +230,9 @@ export default function ConvertPage() {
             <div className="space-y-3">
               <div className="p-3 rounded-lg bg-green-500/10 text-green-600 dark:text-green-400">
                 <p className="text-sm font-medium">
-                  {isZip ? "¡Archivos convertidos correctamente!" : "¡Archivo convertido correctamente!"}
+                  {resultType === "zip"
+                    ? "¡Archivos convertidos correctamente!"
+                    : "¡Archivos agrupados correctamente!"}
                 </p>
               </div>
 
@@ -192,7 +241,7 @@ export default function ConvertPage() {
                 <Input
                   id="output-name"
                   type="text"
-                  placeholder={isZip ? "converted-pdfs.zip" : "converted.pdf"}
+                  placeholder={resultType === "zip" ? "converted-pdfs" : "merged.pdf"}
                   value={outputName}
                   onChange={(e) => setOutputName(e.target.value)}
                 />
@@ -200,7 +249,22 @@ export default function ConvertPage() {
 
               <Button onClick={handleDownload} size="lg" className="w-full">
                 <Download className="mr-2 h-4 w-4" />
-                {isZip ? "Descargar ZIP" : "Descargar PDF"}
+                {resultType === "zip" ? "Descargar ZIP" : "Descargar PDF"}
+              </Button>
+
+              <Button
+                onClick={() => {
+                  setFiles([])
+                  setProcessedBlob(null)
+                  setShowNameInput(false)
+                  setOutputName("")
+                  setMergeMode("zip")
+                }}
+                variant="outline"
+                size="lg"
+                className="w-full"
+              >
+                Convertir otro
               </Button>
             </div>
           )}

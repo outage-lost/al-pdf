@@ -1,12 +1,13 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Combine, Download, AlertCircle } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { FileUploadZone } from "@/components/file-upload-zone"
+import { PdfThumbnailPreview } from "@/components/pdf-thumbnail-preview"
 import { getApiConfig } from "@/lib/api-config"
 import { ApiError } from "@/lib/api-client"
 
@@ -14,6 +15,8 @@ interface FileItem {
   id: string
   file: File
   preview?: string
+  fileId?: string
+  pageCount?: number
 }
 
 export default function MergePage() {
@@ -23,8 +26,57 @@ export default function MergePage() {
   const [outputName, setOutputName] = useState("")
   const [showNameInput, setShowNameInput] = useState(false)
   const [processedBlob, setProcessedBlob] = useState<Blob | null>(null)
+  const [loadingFileIds, setLoadingFileIds] = useState<Set<string>>(new Set())
 
   const canProcess = files.length >= 2
+
+  // Cargar información de cada PDF cuando se sube
+  useEffect(() => {
+    const loadPdfInfo = async () => {
+      const config = getApiConfig()
+      const newFiles = [...files]
+      let updated = false
+
+      for (const fileItem of newFiles) {
+        if (!fileItem.fileId && !loadingFileIds.has(fileItem.id)) {
+          setLoadingFileIds((prev) => new Set(prev).add(fileItem.id))
+
+          try {
+            const formData = new FormData()
+            formData.append("file", fileItem.file)
+
+            const response = await fetch(`${config.baseUrl}/preview-upload`, {
+              method: "POST",
+              body: formData,
+            })
+
+            if (response.ok) {
+              const data = await response.json()
+              fileItem.fileId = data.file_id
+              fileItem.pageCount = data.page_count
+              updated = true
+            }
+          } catch (err) {
+            console.error("Error loading PDF info:", err)
+          }
+
+          setLoadingFileIds((prev) => {
+            const next = new Set(prev)
+            next.delete(fileItem.id)
+            return next
+          })
+        }
+      }
+
+      if (updated) {
+        setFiles(newFiles)
+      }
+    }
+
+    if (files.length > 0) {
+      loadPdfInfo()
+    }
+  }, [files])
 
   const handleMerge = async () => {
     const config = getApiConfig()
@@ -115,8 +167,42 @@ export default function MergePage() {
           <CardTitle>Subir archivos PDF</CardTitle>
           <CardDescription>Sube 2 o más archivos PDF para unir. Arrastra para reordenarlos.</CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4">
-          <FileUploadZone files={files} onFilesChange={setFiles} accept=".pdf" multiple allowReorder showPreview />
+        <CardContent className="space-y-6">
+          <FileUploadZone files={files} onFilesChange={setFiles} accept=".pdf" multiple allowReorder showPreview={false} />
+
+          {/* Preview de miniaturas */}
+          {files.length > 0 && (
+            <div className="space-y-3">
+              <Label className="text-sm font-medium text-muted-foreground">
+                Vista previa de PDFs ({files.length})
+              </Label>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                {files.map((fileItem) => (
+                  <div key={fileItem.id} className="space-y-2">
+                    {fileItem.fileId && fileItem.pageCount ? (
+                      <PdfThumbnailPreview
+                        fileId={fileItem.fileId}
+                        pageCount={fileItem.pageCount}
+                        fileName={fileItem.file.name}
+                        compact={true}
+                        onRemove={() => {
+                          setFiles(files.filter((f) => f.id !== fileItem.id))
+                        }}
+                      />
+                    ) : (
+                      <Card className="relative overflow-hidden bg-muted">
+                        <CardContent className="p-0 w-full aspect-[3/4] flex items-center justify-center">
+                          <div className="text-center">
+                            <p className="text-xs text-muted-foreground">Cargando...</p>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {error && (
             <div className="flex items-center gap-2 p-3 rounded-lg bg-destructive/10 text-destructive">

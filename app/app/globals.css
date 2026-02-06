@@ -117,11 +117,161 @@
   --color-sidebar-ring: var(--sidebar-ring);
 }
 
+/* Animaciones personalizadas modernas */
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fadeInDown {
+  from {
+    opacity: 0;
+    transform: translateY(-20px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slideInRight {
+  from {
+    opacity: 0;
+    transform: translateX(-20px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: -1000px 0;
+  }
+
+  100% {
+    background-position: 1000px 0;
+  }
+}
+
+@keyframes pulse-glow {
+
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.8;
+  }
+}
+
+@keyframes bounce-soft {
+
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+
+  50% {
+    transform: translateY(-4px);
+  }
+}
+
 @layer base {
   * {
-    @apply border-border outline-ring/50;
+    @apply border-border outline-ring/50 transition-colors duration-200;
   }
+
+  html {
+    @apply transition-colors duration-300;
+  }
+
   body {
     @apply bg-background text-foreground;
+    animation: fadeInUp 0.5s ease-out;
+  }
+
+  /* Mejoras visuales globales */
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    @apply font-semibold;
+  }
+
+  /* Transiciones suaves para cambios de tema */
+  [data-theme],
+  .dark {
+    @apply transition-colors duration-300;
+  }
+}
+
+/* Estilos para componentes específicos con animaciones */
+@layer components {
+  .btn-animated {
+    @apply transition-all duration-200 ease-out hover:scale-105 active:scale-95;
+  }
+
+  .card-hover {
+    @apply transition-all duration-300 hover:shadow-lg hover:-translate-y-1;
+  }
+
+  .fade-in {
+    animation: fadeInUp 0.5s ease-out;
+  }
+
+  .slide-in {
+    animation: slideInRight 0.5s ease-out;
+  }
+
+  .pulse-subtle {
+    animation: pulse-glow 2s ease-in-out infinite;
+  }
+
+  /* Inputs y inputs mejorados */
+  input:focus,
+  textarea:focus,
+  select:focus {
+    @apply ring-2 ring-primary/50 border-primary;
+  }
+
+  /* Gradiente de fondo sutil para la página */
+  .page-gradient {
+    @apply bg-gradient-to-br from-background via-background to-primary/5;
+  }
+
+  /* Botones con efecto hover mejorado */
+  button {
+    @apply transition-all duration-200;
+  }
+
+  button:hover:not(:disabled) {
+    @apply shadow-md;
+  }
+
+  button:active:not(:disabled) {
+    @apply scale-95;
+  }
+
+  /* Cards con sombra mejorada */
+  .card {
+    @apply transition-all duration-300;
+  }
+
+  .card:hover {
+    @apply shadow-lg;
   }
 }

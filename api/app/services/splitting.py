@@ -100,6 +100,43 @@ def split_pdf(input_path: str, split_type: str, custom_parts: int = None, pages_
         doc.close()
 
 
+def split_pdf_by_pages(input_path: str, pages_list: list) -> str:
+    """
+    Extraer páginas específicas de un PDF y guardarlas en un nuevo PDF.
+    pages_list: lista de índices de página (0-indexed) ej: [0, 2, 4]
+    Retorna: ruta del PDF generado
+    """
+    doc = fitz.open(input_path)
+    total_pages = len(doc)
+    
+    if not pages_list:
+        doc.close()
+        raise ValueError("La lista de páginas no puede estar vacía")
+    
+    # Validar que todas las páginas estén en rango
+    for page_num in pages_list:
+        if page_num < 0 or page_num >= total_pages:
+            doc.close()
+            raise ValueError(f"Página {page_num + 1} fuera de rango (total: {total_pages})")
+    
+    try:
+        new_doc = fitz.open()
+        for page_num in pages_list:
+            new_doc.insert_pdf(doc, from_page=page_num, to_page=page_num)
+        
+        output_filename = generate_random_filename("pdf")
+        output_path = os.path.join(os.path.dirname(input_path), output_filename)
+        new_doc.save(output_path)
+        new_doc.close()
+        
+        if not os.path.exists(output_path) or os.path.getsize(output_path) == 0:
+            raise ValueError("No se generó el PDF con las páginas seleccionadas")
+        
+        return output_path
+    finally:
+        doc.close()
+
+
 # Alias para compatibilidad con main.py
 def splitpdf(input_path: str, split_type: str, custom_parts: int = None, pages_per_part: int = None) -> list:
     return split_pdf(input_path, split_type, custom_parts, pages_per_part)

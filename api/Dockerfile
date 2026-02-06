@@ -1,3 +1,4 @@
+# Etapa 1: Base
 FROM python:3.9-slim
 
 # Evitar archivos .pyc y forzar logs en tiempo real
@@ -17,6 +18,7 @@ RUN apt-get update && apt-get install -y \
     libreoffice \
     libffi-dev \
     qpdf \
+    curl \
     && rm -rf /var/lib/apt/lists/* \
     && apt-get clean
 
@@ -32,11 +34,11 @@ RUN mkdir -p /app/temp && chmod 777 /app/temp
 # Copiar todo el proyecto
 COPY . .
 
-# Exponer el puerto de tu API (FastAPI/Uvicorn)
+# Exponer el puerto 8999 (puerto interno del contenedor)
 EXPOSE 8999
 
 # COMANDO DE PRODUCCIÓN MEJORADO
-# - Quitamos --reload
-# - Aumentamos el timeout a 5 minutos (300s) por los archivos grandes de 70MB
-# - Usamos 2 workers para no saturar la RAM si LibreOffice y Ghostscript corren al tiempo
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8999", "--workers", "2", "--timeout-keep-alive", "300"]
+# - 4 workers para mejor concurrencia
+# - Timeout 600s (10 minutos) para archivos grandes
+# - Escucha en 0.0.0.0:8999
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8999", "--workers", "4", "--timeout-keep-alive", "600"]
